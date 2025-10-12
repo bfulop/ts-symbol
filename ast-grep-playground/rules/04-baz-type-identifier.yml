@@ -1,0 +1,5 @@
+id: baz-type-identifier
+language: typescript
+rule:
+  kind: type_identifier
+  regex: '^Baz'

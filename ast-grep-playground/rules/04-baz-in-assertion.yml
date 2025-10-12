@@ -1,0 +1,8 @@
+id: baz-in-assertion
+language: typescript
+rule:
+  kind: type_identifier
+  regex: '^Baz'
+  inside:
+    stopBy: end
+    kind: as_expression

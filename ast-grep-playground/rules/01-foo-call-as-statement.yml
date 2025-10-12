@@ -1,0 +1,10 @@
+id: foo-call-as-statement
+language: typescript
+rule:
+  kind: expression_statement
+  has:
+    kind: call_expression
+    has:
+      field: function
+      kind: identifier
+      regex: '^foo'

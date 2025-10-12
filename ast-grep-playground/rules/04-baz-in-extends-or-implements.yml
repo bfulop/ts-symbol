@@ -1,0 +1,10 @@
+id: baz-in-extends-or-implements
+language: typescript
+rule:
+  kind: type_identifier
+  regex: '^Baz'
+  inside:
+    stopBy: end
+    any:
+      - kind: extends_clause
+      - kind: implements_clause

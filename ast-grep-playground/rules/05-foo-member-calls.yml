@@ -1,0 +1,19 @@
+id: foo-member-or-identifier-call
+language: typescript
+rule:
+  any:
+    # free call: foo(...)
+    - kind: call_expression
+      has:
+        field: function
+        kind: identifier
+        regex: '^foo'
+    # member call: obj.foo(...)
+    - kind: call_expression
+      has:
+        field: function
+        kind: member_expression
+        has:
+          field: property
+          kind: property_identifier
+          regex: '^foo'

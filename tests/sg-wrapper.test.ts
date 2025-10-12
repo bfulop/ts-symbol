@@ -49,13 +49,12 @@ test("renders matches for substituted function name", async () => {
     CONFIG_PATH,
     "--funcName",
     "myFunc",
-    "--json",
-    "stream",
+    "--pretty",
   ]);
 
   expect(stderr).toBe("");
   expect(exitCode).toBe(0);
-  const matches = parseJsonLines(stdout);
+  const matches = JSON.parse(stdout);
   const ruleIds = matches.map((match) => match.ruleId);
   expect(ruleIds.some((id) => id.includes("foo"))).toBe(true);
 });
@@ -74,13 +73,51 @@ test("renders matches for substituted type name", async () => {
     CONFIG_PATH,
     "--typeName",
     "BazReplacement",
-    "--json",
-    "stream",
+    "--pretty",
   ]);
 
   expect(stderr).toBe("");
   expect(exitCode).toBe(0);
-  const matches = parseJsonLines(stdout);
+  const matches = JSON.parse(stdout);
   const ruleIds = matches.map((match) => match.ruleId);
   expect(ruleIds.some((id) => id.includes("baz"))).toBe(true);
+});
+
+test("deduplicates multiple rule hits on the same span and provides context", async () => {
+  const tmpDir = await mkdtemp(join(tmpdir(), "sg-wrapper-await-"));
+  const filePath = join(tmpDir, `await-${randomUUID()}.ts`);
+  await writeFile(
+    filePath,
+    [
+      "async function g() {",
+      "  await myFunc(5);",
+      "}",
+      "",
+      "async function h() {",
+      "  return async function bar() {",
+      "    await myFunc();",
+      "  };",
+      "}",
+      "",
+    ].join("\n"),
+  );
+
+  const { exitCode, stdout, stderr } = await runCli([
+    filePath,
+    "--config",
+    CONFIG_PATH,
+    "--funcName",
+    "myFunc",
+    "--pretty",
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  const matches = JSON.parse(stdout);
+  // two awaits -> two unique matches
+  expect(matches.length).toBe(2);
+  for (const m of matches) {
+    expect(m.snippet).toContain("await myFunc");
+    expect(m.snippetStartLine).toBeLessThanOrEqual(m.snippetEndLine);
+  }
 });

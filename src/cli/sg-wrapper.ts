@@ -35,6 +35,15 @@ const { values, positionals } = parseArgs({
     json: {
       type: "string",
     },
+    unique: {
+      type: "boolean",
+    },
+    context: {
+      type: "string",
+    },
+    pretty: {
+      type: "boolean",
+    },
   },
   strict: true,
   allowPositionals: true,
@@ -49,6 +58,9 @@ if (positionals.length === 0) {
 const funcName = values.funcName ?? "foo";
 const typeName = values.typeName ?? "Baz";
 const jsonStyle = values.json ?? "stream";
+const unique = values.unique !== false; // default true
+const contextLines = values.context ? Math.max(0, Number(values.context)) : 6;
+const pretty = values.pretty === true;
 
 const replacements: Replacements = {
   __FUNC_NAME__: funcName,
@@ -160,7 +172,8 @@ async function run(): Promise<void> {
       "scan",
       "--config",
       generatedConfigPath,
-      // `--json=${jsonStyle}`,
+      `--json=${jsonStyle}`,
+      "--include-metadata",
       ...positionals.map((path) => resolve(path)),
     ];
 
@@ -175,7 +188,30 @@ async function run(): Promise<void> {
     if (stdoutPromise) {
       const output = await stdoutPromise;
       if (output) {
-        process.stdout.write(output);
+        // Try to parse JSON stream; if parsing fails, fallback to passthrough
+        const lines = output
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0);
+
+        let parsed: any[] | null = null;
+        try {
+          parsed = lines.map((l) => JSON.parse(l));
+        } catch {
+          process.stdout.write(output);
+          parsed = null;
+        }
+
+        if (parsed) {
+          const results = await postProcess(parsed, contextLines, unique);
+          if (pretty) {
+            process.stdout.write(JSON.stringify(results, null, 2) + "\n");
+          } else {
+            for (const obj of results) {
+              process.stdout.write(JSON.stringify(obj) + "\n");
+            }
+          }
+        }
       }
     }
     if (stderrPromise) {
@@ -197,3 +233,119 @@ run().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
+
+type Location = {
+  file: string;
+  start: { line?: number; column?: number; byte?: number };
+  end: { line?: number; column?: number; byte?: number };
+};
+
+type MatchObj = Record<string, any> & {
+  ruleId?: string;
+  file?: string;
+  range?: { start: any; end: any };
+  span?: { start: any; end: any };
+  position?: { start: any; end: any };
+};
+
+async function postProcess(objs: MatchObj[], ctx: number, dedupe: boolean) {
+  let items: MatchObj[];
+  if (dedupe) {
+    // Cluster by overlapping line ranges per file and keep the smallest-span representative
+    const byFile: Record<string, Array<{ obj: MatchObj; start: number; end: number; rules: Set<string> }>> = {};
+    for (const obj of objs) {
+      const loc = extractLocation(obj);
+      if (!loc || !loc.file) continue;
+      const sLine = normalizeLine(loc.start.line);
+      const eLine = normalizeLine(loc.end.line);
+      const entry = { obj, start: Math.min(sLine, eLine), end: Math.max(sLine, eLine), rules: new Set<string>(obj.ruleId ? [obj.ruleId] : []) };
+      const list = (byFile[loc.file] ||= []);
+      // find overlapping cluster
+      let merged = false;
+      for (const existing of list) {
+        const overlap = !(entry.end < existing.start || entry.start > existing.end);
+        if (overlap) {
+          // choose smaller span as representative
+          const curSpan = entry.end - entry.start;
+          const exSpan = existing.end - existing.start;
+          if (curSpan < exSpan) {
+            existing.obj = obj;
+            existing.start = entry.start;
+            existing.end = entry.end;
+          } else {
+            // expand to union to continue grouping
+            existing.start = Math.min(existing.start, entry.start);
+            existing.end = Math.max(existing.end, entry.end);
+          }
+          if (obj.ruleId) existing.rules.add(obj.ruleId);
+          merged = true;
+          break;
+        }
+      }
+      if (!merged) list.push(entry);
+    }
+    items = Object.values(byFile).flatMap((arr) => arr.map((e) => ({ ...e.obj, ruleIds: [...e.rules] })));
+  } else {
+    items = objs;
+  }
+
+  // Load files and add snippet
+  const fileCache = new Map<string, string[]>();
+  for (const it of items) {
+    const loc = extractLocation(it);
+    if (!loc || !loc.file) continue;
+    let lines = fileCache.get(loc.file);
+    if (!lines) {
+      try {
+        const content = await readFile(loc.file, "utf8");
+        lines = content.split(/\r?\n/);
+        fileCache.set(loc.file, lines);
+      } catch {
+        continue;
+      }
+    }
+    const sLine = normalizeLine(loc.start.line);
+    const eLine = normalizeLine(loc.end.line);
+    const from = Math.max(1, Math.min(sLine, eLine) - ctx);
+    const to = Math.min(lines.length, Math.max(sLine, eLine) + ctx);
+    (it as any).snippetStartLine = from;
+    (it as any).snippetEndLine = to;
+    (it as any).snippet = lines.slice(from - 1, to).join("\n");
+  }
+
+  return items;
+}
+
+function extractLocation(obj: MatchObj): Location | null {
+  const file = (obj.file as string) || (obj.path as string) || (obj.filePath as string);
+  const r = (obj.range as any) || (obj.span as any) || (obj.position as any);
+  if (!file || !r) return null;
+  const start = r.start || {};
+  const end = r.end || {};
+  return { file, start, end };
+}
+
+function makeKey(loc: Location): string {
+  const bStart = loc.start.byte ?? -1;
+  const bEnd = loc.end.byte ?? -1;
+  if (bStart !== -1 && bEnd !== -1) {
+    return `${loc.file}:${bStart}-${bEnd}`;
+  }
+  const sL = normalizeLine(loc.start.line);
+  const sC = normalizeCol(loc.start.column);
+  const eL = normalizeLine(loc.end.line);
+  const eC = normalizeCol(loc.end.column);
+  return `${loc.file}:${sL}:${sC}-${eL}:${eC}`;
+}
+
+function normalizeLine(n: any): number {
+  if (typeof n === "number" && Number.isFinite(n)) return n;
+  if (typeof n === "string" && n.trim() !== "") return Number(n);
+  return 1;
+}
+
+function normalizeCol(n: any): number {
+  if (typeof n === "number" && Number.isFinite(n)) return n;
+  if (typeof n === "string" && n.trim() !== "") return Number(n);
+  return 1;
+}

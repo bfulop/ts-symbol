@@ -1,0 +1,5 @@
+id: foo-relational-placeholder
+language: typescript
+rule:
+  kind: identifier
+  regex: '^$'

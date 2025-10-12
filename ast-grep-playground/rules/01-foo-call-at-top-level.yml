@@ -1,0 +1,28 @@
+id: foo-call-at-top-level
+language: typescript
+utils:
+  foo-free-call:
+    kind: call_expression
+    has:
+      field: function
+      kind: identifier
+      regex: '^foo$'
+  foo-member-call:
+    kind: call_expression
+    has:
+      field: function
+      kind: member_expression
+      has:
+        field: property
+        kind: property_identifier
+        regex: '^foo$'
+  foo-call:
+    any:
+      - matches: foo-free-call
+      - matches: foo-member-call
+rule:
+  kind: program
+  has:
+    kind: expression_statement
+    has:
+      matches: foo-call

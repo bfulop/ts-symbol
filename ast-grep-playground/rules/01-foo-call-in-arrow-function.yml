@@ -1,0 +1,27 @@
+id: foo-call-in-arrow-function
+language: typescript
+utils:
+  foo-free-call:
+    kind: call_expression
+    has:
+      field: function
+      kind: identifier
+      regex: '^foo$'
+  foo-member-call:
+    kind: call_expression
+    has:
+      field: function
+      kind: member_expression
+      has:
+        field: property
+        kind: property_identifier
+        regex: '^foo$'
+  foo-call:
+    any:
+      - matches: foo-free-call
+      - matches: foo-member-call
+rule:
+  kind: arrow_function
+  has:
+    stopBy: end
+    matches: foo-call

@@ -1,10 +1,23 @@
 id: baz-in-extends-or-implements
 language: typescript
-rule:
-  kind: type_identifier
-  regex: '^Baz'
-  inside:
-    stopBy: end
+utils:
+  baz-type:
     any:
-      - kind: extends_clause
-      - kind: implements_clause
+      - kind: type_identifier
+        regex: '^Baz'
+      - kind: identifier
+        regex: '^Baz'
+rule:
+  any:
+    - kind: interface_declaration
+      has:
+        kind: extends_type_clause
+        has:
+          matches: baz-type
+    - kind: class_declaration
+      has:
+        kind: class_heritage
+        has:
+          kind: implements_clause
+          has:
+            matches: baz-type

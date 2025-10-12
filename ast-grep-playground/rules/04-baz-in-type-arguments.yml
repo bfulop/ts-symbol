@@ -1,8 +1,67 @@
 id: baz-in-type-arguments
 language: typescript
+utils:
+  baz-type-leaf:
+    any:
+      - kind: type_identifier
+        regex: '^Baz'
+      - kind: identifier
+        regex: '^Baz'
+  baz-type-deep:
+    any:
+      - matches: baz-type-leaf
+      - kind: type_arguments
+        has:
+          matches: baz-type-deep
+      - kind: array_type
+        has:
+          matches: baz-type-deep
+      - kind: parenthesized_type
+        has:
+          matches: baz-type-deep
+      - kind: union_type
+        has:
+          matches: baz-type-deep
+      - kind: intersection_type
+        has:
+          matches: baz-type-deep
+      - kind: conditional_type
+        has:
+          matches: baz-type-deep
+      - kind: lookup_type
+        has:
+          matches: baz-type-deep
+      - kind: generic_type
+        has:
+          matches: baz-type-deep
 rule:
-  kind: type_identifier
-  regex: '^Baz'
-  inside:
-    stopBy: end
-    kind: type_arguments
+  any:
+    - kind: generic_type
+      has:
+        matches: baz-type-deep
+    - kind: instantiation_expression
+      has:
+        kind: type_arguments
+        has:
+          matches: baz-type-deep
+    - kind: call_expression
+      has:
+        kind: type_arguments
+        has:
+          matches: baz-type-deep
+    - kind: new_expression
+      has:
+        kind: type_arguments
+        has:
+          matches: baz-type-deep
+    - kind: type_alias_declaration
+      has:
+        matches: baz-type-deep
+      not:
+        has:
+          field: name
+          any:
+            - kind: type_identifier
+              regex: '^Baz'
+            - kind: identifier
+              regex: '^Baz'

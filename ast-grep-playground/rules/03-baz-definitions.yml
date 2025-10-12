@@ -1,20 +1,27 @@
 id: baz-definition
 language: typescript
+utils:
+  baz-name:
+    any:
+      - kind: type_identifier
+        regex: '^Baz'
+      - kind: identifier
+        regex: '^Baz'
 rule:
   any:
     - kind: type_alias_declaration
       has:
         field: name
-        regex: '^Baz'
+        matches: baz-name
     - kind: interface_declaration
       has:
         field: name
-        regex: '^Baz'
+        matches: baz-name
     - kind: class_declaration
       has:
         field: name
-        regex: '^Baz'
+        matches: baz-name
     - kind: enum_declaration
       has:
         field: name
-        regex: '^Baz'
+        matches: baz-name

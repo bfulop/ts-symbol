@@ -1,8 +1,54 @@
 id: baz-in-annotation
 language: typescript
+utils:
+  baz-type-leaf:
+    any:
+      - kind: type_identifier
+        regex: '^Baz'
+      - kind: identifier
+        regex: '^Baz'
+  baz-type-deep:
+    any:
+      - matches: baz-type-leaf
+      - kind: union_type
+        has:
+          matches: baz-type-deep
+      - kind: intersection_type
+        has:
+          matches: baz-type-deep
+      - kind: type_arguments
+        has:
+          matches: baz-type-deep
+      - kind: array_type
+        has:
+          matches: baz-type-deep
+      - kind: parenthesized_type
+        has:
+          matches: baz-type-deep
 rule:
-  kind: type_identifier
-  regex: '^Baz'
-  inside:
-    stopBy: end
-    kind: type_annotation
+  any:
+    - kind: variable_declarator
+      has:
+        kind: type_annotation
+        has:
+          matches: baz-type-deep
+    - kind: property_signature
+      has:
+        kind: type_annotation
+        has:
+          matches: baz-type-deep
+    - kind: public_field_definition
+      has:
+        kind: type_annotation
+        has:
+          matches: baz-type-deep
+    - kind: required_parameter
+      has:
+        kind: type_annotation
+        has:
+          matches: baz-type-deep
+    - kind: function_declaration
+      has:
+        kind: type_annotation
+        has:
+          matches: baz-type-deep

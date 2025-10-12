@@ -1,0 +1,11 @@
+id: foo-call-in-await
+language: typescript
+rule:
+  kind: function_declaration
+  has:
+    kind: call_expression
+    stopBy: end
+    has:
+      field: function
+      kind: identifier
+      regex: "^foo"

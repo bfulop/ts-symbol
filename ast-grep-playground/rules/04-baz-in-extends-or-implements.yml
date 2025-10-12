@@ -4,9 +4,9 @@ utils:
   baz-type:
     any:
       - kind: type_identifier
-        regex: '^Baz'
+        regex: '^__TYPE_NAME__'
       - kind: identifier
-        regex: '^Baz'
+        regex: '^__TYPE_NAME__'
 rule:
   any:
     - kind: interface_declaration

@@ -7,4 +7,4 @@ rule:
     has:
       field: function
       kind: identifier
-      regex: '^foo'
+      regex: '^__FUNC_NAME__$'

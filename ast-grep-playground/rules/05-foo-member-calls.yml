@@ -7,7 +7,7 @@ rule:
       has:
         field: function
         kind: identifier
-        regex: '^foo'
+        regex: '^__FUNC_NAME__$'
     # member call: obj.foo(...)
     - kind: call_expression
       has:
@@ -16,4 +16,4 @@ rule:
         has:
           field: property
           kind: property_identifier
-          regex: '^foo'
+          regex: '^__FUNC_NAME__$'

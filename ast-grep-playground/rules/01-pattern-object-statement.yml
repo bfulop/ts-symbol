@@ -1,8 +1,5 @@
 id: foo-pattern-statement-full
 language: typescript
 rule:
-  pattern:
-    context: |
-      foo($$$ARGS)
-    selector: call_expression
-    strictness: lenient
+  pattern: |
+    __FUNC_NAME__($$$ARGS)

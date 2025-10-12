@@ -6,7 +6,7 @@ utils:
     has:
       field: function
       kind: identifier
-      regex: '^foo$'
+      regex: '^__FUNC_NAME__$'
   foo-member-call:
     kind: call_expression
     has:
@@ -15,7 +15,7 @@ utils:
       has:
         field: property
         kind: property_identifier
-        regex: '^foo$'
+        regex: '^__FUNC_NAME__$'
   foo-call:
     any:
       - matches: foo-free-call

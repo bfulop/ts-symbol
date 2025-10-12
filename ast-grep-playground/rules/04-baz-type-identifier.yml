@@ -3,6 +3,6 @@ language: typescript
 rule:
   any:
     - kind: type_identifier
-      regex: '^Baz'
+      regex: '^__TYPE_NAME__'
     - kind: identifier
-      regex: '^Baz'
+      regex: '^__TYPE_NAME__'

@@ -44,6 +44,15 @@ const { values, positionals } = parseArgs({
     pretty: {
       type: "boolean",
     },
+    unified: {
+      type: "string",
+    },
+    format: {
+      type: "string",
+    },
+    native: {
+      type: "boolean",
+    },
   },
   strict: true,
   allowPositionals: true,
@@ -61,6 +70,18 @@ const jsonStyle = values.json ?? "stream";
 const unique = values.unique !== false; // default true
 const contextLines = values.context ? Math.max(0, Number(values.context)) : 6;
 const pretty = values.pretty === true;
+const unified = (() => {
+  const v = values.unified;
+  if (v === undefined) return true;
+  if (typeof v === "string") {
+    const lowered = v.toLowerCase();
+    if (lowered === "false") return false;
+    if (lowered === "true") return true;
+  }
+  return Boolean(v);
+})();
+const format = (values.format as string) ?? "json"; // json | text
+const nativeMode = values.native === true;
 
 const replacements: Replacements = {
   __FUNC_NAME__: funcName,
@@ -168,14 +189,27 @@ async function run(): Promise<void> {
     const generatedConfigPath = join(workDir, "sgconfig.yml");
     await writeFile(generatedConfigPath, YAML.stringify(generatedConfig));
 
-    const sgArgs = [
-      "scan",
-      "--config",
-      generatedConfigPath,
-      `--json=${jsonStyle}`,
-      "--include-metadata",
-      ...positionals.map((path) => resolve(path)),
-    ];
+    const sgArgs = nativeMode
+      ? [
+          "scan",
+          "--config",
+          generatedConfigPath,
+          ...(unified ? ["--filter", "agent-target-usage"] : []),
+          "-C",
+          String(contextLines),
+          "--heading",
+          "always",
+          ...positionals.map((path) => resolve(path)),
+        ]
+      : [
+          "scan",
+          "--config",
+          generatedConfigPath,
+          `--json=${jsonStyle}`,
+          "--include-metadata",
+          ...(unified ? ["--filter", "agent-target-usage"] : []),
+          ...positionals.map((path) => resolve(path)),
+        ];
 
     const proc = Bun.spawn(["sg", ...sgArgs], {
       stdout: "pipe",
@@ -188,27 +222,44 @@ async function run(): Promise<void> {
     if (stdoutPromise) {
       const output = await stdoutPromise;
       if (output) {
-        // Try to parse JSON stream; if parsing fails, fallback to passthrough
-        const lines = output
-          .split("\n")
-          .map((l) => l.trim())
-          .filter((l) => l.length > 0);
-
-        let parsed: any[] | null = null;
-        try {
-          parsed = lines.map((l) => JSON.parse(l));
-        } catch {
+        if (nativeMode) {
+          // passthrough native sg output
           process.stdout.write(output);
-          parsed = null;
-        }
+        } else {
+          // Try to parse JSON stream; if parsing fails, fallback to passthrough
+          const lines = output
+            .split("\n")
+            .map((l) => l.trim())
+            .filter((l) => l.length > 0);
 
-        if (parsed) {
-          const results = await postProcess(parsed, contextLines, unique);
-          if (pretty) {
-            process.stdout.write(JSON.stringify(results, null, 2) + "\n");
-          } else {
-            for (const obj of results) {
-              process.stdout.write(JSON.stringify(obj) + "\n");
+          let parsed: any[] | null = null;
+          try {
+            parsed = lines.map((l) => JSON.parse(l));
+          } catch {
+            process.stdout.write(output);
+            parsed = null;
+          }
+
+          if (parsed) {
+            const results = await postProcess(parsed, contextLines, unique);
+            if (format === "text") {
+              for (const r of results) {
+                const file = (r.file as string) || (r.path as string) || (r.filePath as string) || "";
+                const start = (r as any).snippetStartLine ?? 1;
+                const end = (r as any).snippetEndLine ?? start;
+                process.stdout.write(`path: ${file}  lines: ${start}-${end}\n`);
+                process.stdout.write("```ts\n");
+                process.stdout.write(((r as any).snippet as string) + "\n");
+                process.stdout.write("```\n\n");
+              }
+            } else {
+              if (pretty) {
+                process.stdout.write(JSON.stringify(results, null, 2) + "\n");
+              } else {
+                for (const obj of results) {
+                  process.stdout.write(JSON.stringify(obj) + "\n");
+                }
+              }
             }
           }
         }
@@ -252,18 +303,28 @@ async function postProcess(objs: MatchObj[], ctx: number, dedupe: boolean) {
   let items: MatchObj[];
   if (dedupe) {
     // Cluster by overlapping line ranges per file and keep the smallest-span representative
-    const byFile: Record<string, Array<{ obj: MatchObj; start: number; end: number; rules: Set<string> }>> = {};
+    const byFile: Record<
+      string,
+      Array<{ obj: MatchObj; start: number; end: number; rules: Set<string> }>
+    > = {};
     for (const obj of objs) {
       const loc = extractLocation(obj);
       if (!loc || !loc.file) continue;
       const sLine = normalizeLine(loc.start.line);
       const eLine = normalizeLine(loc.end.line);
-      const entry = { obj, start: Math.min(sLine, eLine), end: Math.max(sLine, eLine), rules: new Set<string>(obj.ruleId ? [obj.ruleId] : []) };
+      const entry = {
+        obj,
+        start: Math.min(sLine, eLine),
+        end: Math.max(sLine, eLine),
+        rules: new Set<string>(obj.ruleId ? [obj.ruleId] : []),
+      };
       const list = (byFile[loc.file] ||= []);
       // find overlapping cluster
       let merged = false;
       for (const existing of list) {
-        const overlap = !(entry.end < existing.start || entry.start > existing.end);
+        const overlap = !(
+          entry.end < existing.start || entry.start > existing.end
+        );
         if (overlap) {
           // choose smaller span as representative
           const curSpan = entry.end - entry.start;
@@ -284,7 +345,9 @@ async function postProcess(objs: MatchObj[], ctx: number, dedupe: boolean) {
       }
       if (!merged) list.push(entry);
     }
-    items = Object.values(byFile).flatMap((arr) => arr.map((e) => ({ ...e.obj, ruleIds: [...e.rules] })));
+    items = Object.values(byFile).flatMap((arr) =>
+      arr.map((e) => ({ ...e.obj, ruleIds: [...e.rules] })),
+    );
   } else {
     items = objs;
   }
@@ -317,7 +380,8 @@ async function postProcess(objs: MatchObj[], ctx: number, dedupe: boolean) {
 }
 
 function extractLocation(obj: MatchObj): Location | null {
-  const file = (obj.file as string) || (obj.path as string) || (obj.filePath as string);
+  const file =
+    (obj.file as string) || (obj.path as string) || (obj.filePath as string);
   const r = (obj.range as any) || (obj.span as any) || (obj.position as any);
   if (!file || !r) return null;
   const start = r.start || {};

@@ -1,0 +1,96 @@
+id: agent-target-usage
+language: typescript
+utils:
+  func-call-free: &func_call_free
+    kind: call_expression
+    has:
+      field: function
+      kind: identifier
+      regex: '^__FUNC_NAME__$'
+  func-call-member: &func_call_member
+    kind: call_expression
+    has:
+      field: function
+      kind: member_expression
+      has:
+        field: property
+        kind: property_identifier
+        regex: '^__FUNC_NAME__$'
+  func-call-any:
+    any:
+      - matches: func-call-free
+      - matches: func-call-member
+  func-call-container:
+    any:
+      - kind: function_declaration
+        has:
+          stopBy: end
+          any:
+            - *func_call_free
+            - *func_call_member
+      - kind: function_expression
+        has:
+          stopBy: end
+          any:
+            - *func_call_free
+            - *func_call_member
+      - kind: arrow_function
+        has:
+          stopBy: end
+          any:
+            - *func_call_free
+            - *func_call_member
+      - kind: method_definition
+        has:
+          stopBy: end
+          any:
+            - *func_call_free
+            - *func_call_member
+      - kind: expression_statement
+        has:
+          any:
+            - *func_call_free
+            - *func_call_member
+      - kind: return_statement
+        has:
+          any:
+            - *func_call_free
+            - *func_call_member
+      - kind: variable_declarator
+        has:
+          stopBy: end
+          any:
+            - *func_call_free
+            - *func_call_member
+
+  type-leaf:
+    any:
+      - kind: type_identifier
+        regex: '^__TYPE_NAME__'
+      - kind: identifier
+        regex: '^__TYPE_NAME__'
+  type-deep:
+    any:
+      - matches: type-leaf
+      - kind: array_type
+        has:
+          matches: type-deep
+      - kind: parenthesized_type
+        has:
+          matches: type-deep
+      - kind: union_type
+        has:
+          matches: type-deep
+      - kind: intersection_type
+        has:
+          matches: type-deep
+      - kind: type_arguments
+        has:
+          matches: type-deep
+      - kind: generic_type
+        has:
+          matches: type-deep
+rule:
+  any:
+    - matches: func-call-container
+    - matches: type-deep

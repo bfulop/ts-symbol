@@ -49,6 +49,8 @@ test("renders matches for substituted function name", async () => {
     CONFIG_PATH,
     "--funcName",
     "myFunc",
+    "--unified",
+    "false",
     "--pretty",
   ]);
 
@@ -73,14 +75,16 @@ test("renders matches for substituted type name", async () => {
     CONFIG_PATH,
     "--typeName",
     "BazReplacement",
+    "--unified",
+    "false",
     "--pretty",
   ]);
 
   expect(stderr).toBe("");
   expect(exitCode).toBe(0);
   const matches = JSON.parse(stdout);
-  const ruleIds = matches.map((match) => match.ruleId);
-  expect(ruleIds.some((id) => id.includes("baz"))).toBe(true);
+  const ruleIds = matches.flatMap((m: any) => [m.ruleId, ...(m.ruleIds ?? [])].filter(Boolean));
+  expect(ruleIds.some((id: string) => String(id).includes("baz"))).toBe(true);
 });
 
 test("deduplicates multiple rule hits on the same span and provides context", async () => {
@@ -108,6 +112,7 @@ test("deduplicates multiple rule hits on the same span and provides context", as
     CONFIG_PATH,
     "--funcName",
     "myFunc",
+    // default unified=true; ensure dedup by single composite rule
     "--pretty",
   ]);
 
@@ -121,3 +126,45 @@ test("deduplicates multiple rule hits on the same span and provides context", as
     expect(m.snippetStartLine).toBeLessThanOrEqual(m.snippetEndLine);
   }
 });
+
+test("text format outputs header and fenced code blocks", async () => {
+  const tmpDir = await mkdtemp(join(tmpdir(), "sg-wrapper-text-"));
+  const filePath = join(tmpDir, `await-${randomUUID()}.ts`);
+  await writeFile(
+    filePath,
+    [
+      "async function g() {",
+      "  await myFunc(5);",
+      "}",
+      "",
+      "async function h() {",
+      "  return async function bar() {",
+      "    await myFunc();",
+      "  };",
+      "}",
+      "",
+    ].join("\n"),
+  );
+
+  const { exitCode, stdout, stderr } = await runCli([
+    filePath,
+    "--config",
+    CONFIG_PATH,
+    "--funcName",
+    "myFunc",
+    "--format",
+    "text",
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain("path:");
+  expect(stdout).toContain("```ts\n");
+  // Two matches -> at least two code blocks
+  const fences = (stdout.match(/```/g) || []).length;
+  expect(fences).toBeGreaterThanOrEqual(4); // opening+closing per block
+  expect(stdout).toContain("await myFunc");
+});
+
+// Note: native passthrough mode intentionally not tested here because scan output
+// requires diagnostic messages/severity in rules to produce text. Our rules are matchers only.

@@ -1,22 +1,13 @@
 id: ts-symbol-usage
 language: typescript
-utils:
-  symbol-identifier:
-    kind: identifier
-    regex: '^__SYMBOL__$'
-  symbol-type-identifier:
-    kind: type_identifier
-    regex: '^__SYMBOL__$'
-  symbol-property-identifier:
-    kind: property_identifier
-    regex: '^__SYMBOL__$'
 rule:
   any:
     # Function calls - direct identifier
     - kind: call_expression
       has:
         field: function
-        matches: symbol-identifier
+        kind: identifier
+        regex: '^__SYMBOL__$'
     
     # Function calls - member expression
     - kind: call_expression
@@ -25,58 +16,71 @@ rule:
         kind: member_expression
         has:
           field: property
-          matches: symbol-property-identifier
+          kind: property_identifier
+          regex: '^__SYMBOL__$'
     
     # Member access - property identifier
     - kind: member_expression
       has:
         field: property
-        matches: symbol-property-identifier
+        kind: property_identifier
+        regex: '^__SYMBOL__$'
     
     # Variable references (standalone identifiers)
-    - matches: symbol-identifier
+    - kind: identifier
+      regex: '^__SYMBOL__$'
     
     # New expressions
     - kind: new_expression
       has:
         field: constructor
-        matches: symbol-identifier
+        kind: identifier
+        regex: '^__SYMBOL__$'
     
     # Await expressions
     - kind: await_expression
       has:
         field: argument
-        matches: symbol-identifier
+        kind: identifier
+        regex: '^__SYMBOL__$'
     
     # Type annotations
     - kind: type_annotation
       has:
         any:
-          - matches: symbol-type-identifier
-          - matches: symbol-identifier
+          - kind: type_identifier
+            regex: '^__SYMBOL__$'
+          - kind: identifier
+            regex: '^__SYMBOL__$'
     
     # Generic type arguments
     - kind: type_arguments
       has:
         any:
-          - matches: symbol-type-identifier
-          - matches: symbol-identifier
+          - kind: type_identifier
+            regex: '^__SYMBOL__$'
+          - kind: identifier
+            regex: '^__SYMBOL__$'
     
     # Type assertions (as and satisfies)
     - kind: type_assertion
       has:
         field: type
         any:
-          - matches: symbol-type-identifier
-          - matches: symbol-identifier
+          - kind: type_identifier
+            regex: '^__SYMBOL__$'
+          - kind: identifier
+            regex: '^__SYMBOL__$'
     
     # Export named specifier
     - kind: export_specifier
       has:
         field: name
-        matches: symbol-identifier
+        kind: identifier
+        regex: '^__SYMBOL__$'
     
     # Template literal substitutions
     - kind: template_substitution
       has:
-        matches: symbol-identifier
+        kind: identifier
+        regex: '^__SYMBOL__$'

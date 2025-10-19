@@ -1,0 +1,4 @@
+id: test-rule
+language: typescript
+rule:
+  kind: function_declaration

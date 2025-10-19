@@ -63,13 +63,13 @@ test("definition mode emits definition blocks", async () => {
   expect(blocks.some((b) => b.includes("function MySymbol()"))).toBe(true);
 });
 
-test("usage-expanded mode emits contextual blocks", async () => {
+test("usage mode emits contextual blocks", async () => {
   const { exitCode, stdout, stderr } = await runCli([
     "test-fixtures/usages.ts",
     "--symbol",
     "MySymbol",
     "--mode",
-    "usage-expanded",
+    "usage",
     "--config",
     CONFIG_PATH,
   ]);
@@ -123,7 +123,7 @@ test("invalid mode parameter shows error", async () => {
   ]);
 
   expect(exitCode).toBe(1);
-  expect(stderr).toContain("--mode must be 'definition', 'usage', or 'usage-expanded'");
+  expect(stderr).toContain("--mode must be 'definition' or 'usage'");
 });
 
 test("defaults to definition mode", async () => {

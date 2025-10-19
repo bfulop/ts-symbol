@@ -7,7 +7,7 @@ const SGCONFIG =
   "/Users/balint.fulop/Work2/astGrep/ast-grep-playground/sgconfig.yml";
 const DEFAULT_ROOT = "~/Work/pulsar";
 
-type Mode = "definition" | "usage" | "usage-expanded";
+type Mode = "definition" | "usage";
 
 function expandTilde(p: string) {
   return p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
@@ -79,6 +79,6 @@ export const findUsage = tool({
       .describe("Repository root (defaults to ~/Work/pulsar)"),
   },
   async execute(args: { symbol: string; root?: string }) {
-    return runScan("usage-expanded", args.symbol, args.root);
+    return runScan("usage", args.symbol, args.root);
   },
 });

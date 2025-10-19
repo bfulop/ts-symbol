@@ -2,87 +2,53 @@ id: ts-symbol-usage
 language: typescript
 message: "Symbol usage: __SYMBOL__"
 severity: warning
+utils:
+  symbol-leaf:
+    any:
+      - kind: identifier
+        regex: '^__SYMBOL__$'
+      - kind: property_identifier
+        regex: '^__SYMBOL__$'
+      - kind: type_identifier
+        regex: '^__SYMBOL__$'
 rule:
   any:
-    # Function calls - direct identifier
-    - kind: call_expression
+    - kind: function_declaration
       has:
-        field: function
-        kind: identifier
-        regex: '^__SYMBOL__$'
-    
-    # Function calls - member expression
-    - kind: call_expression
+        stopBy: end
+        matches: symbol-leaf
+    - kind: method_definition
       has:
-        field: function
-        kind: member_expression
-        has:
-          field: property
-          kind: property_identifier
-          regex: '^__SYMBOL__$'
-    
-    # Member access - property identifier
-    - kind: member_expression
+        stopBy: end
+        matches: symbol-leaf
+    - kind: class_declaration
       has:
-        field: property
-        kind: property_identifier
-        regex: '^__SYMBOL__$'
-    
-    # Variable references (standalone identifiers)
-    - kind: identifier
-      regex: '^__SYMBOL__$'
-    
-    # New expressions
-    - kind: new_expression
+        stopBy: end
+        matches: symbol-leaf
+    - kind: interface_declaration
       has:
-        field: constructor
-        kind: identifier
-        regex: '^__SYMBOL__$'
-    
-    # Await expressions
-    - kind: await_expression
+        stopBy: end
+        matches: symbol-leaf
+    - kind: type_alias_declaration
       has:
-        field: argument
-        kind: identifier
-        regex: '^__SYMBOL__$'
-    
-    # Type annotations
-    - kind: type_annotation
+        stopBy: end
+        matches: symbol-leaf
+    - kind: enum_declaration
       has:
-        any:
-          - kind: type_identifier
-            regex: '^__SYMBOL__$'
-          - kind: identifier
-            regex: '^__SYMBOL__$'
-    
-    # Generic type arguments
-    - kind: type_arguments
+        stopBy: end
+        matches: symbol-leaf
+    - kind: variable_declarator
       has:
-        any:
-          - kind: type_identifier
-            regex: '^__SYMBOL__$'
-          - kind: identifier
-            regex: '^__SYMBOL__$'
-    
-    # Type assertions (as and satisfies)
-    - kind: type_assertion
+        stopBy: end
+        matches: symbol-leaf
+      not:
+        inside:
+          kind: lexical_declaration
+          inside:
+            kind: statement_block
+    - kind: expression_statement
       has:
-        field: type
-        any:
-          - kind: type_identifier
-            regex: '^__SYMBOL__$'
-          - kind: identifier
-            regex: '^__SYMBOL__$'
-    
-    # Export named specifier
-    - kind: export_specifier
-      has:
-        field: name
-        kind: identifier
-        regex: '^__SYMBOL__$'
-    
-    # Template literal substitutions
-    - kind: template_substitution
-      has:
-        kind: identifier
-        regex: '^__SYMBOL__$'
+        matches: symbol-leaf
+      not:
+        inside:
+          kind: statement_block

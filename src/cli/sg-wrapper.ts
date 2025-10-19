@@ -50,8 +50,8 @@ if (positionals.length === 0) {
 
 // Validate mode parameter
 const mode = values.mode as string | undefined;
-if (mode && mode !== "definition" && mode !== "usage" && mode !== "usage-expanded") {
-  console.error("error: --mode must be 'definition', 'usage', or 'usage-expanded'");
+if (mode && mode !== "definition" && mode !== "usage") {
+  console.error("error: --mode must be 'definition' or 'usage'");
   process.exitCode = 1;
   process.exit();
 }
@@ -64,7 +64,7 @@ if (!values.symbol) {
 }
 
 const symbol = values.symbol;
-const searchMode = (mode ?? "definition") as "definition" | "usage" | "usage-expanded";
+const searchMode = (mode ?? "definition") as "definition" | "usage";
 const contextLines = values.context ? Math.max(0, Number(values.context)) : 0; // default to exact node
 
 const replacements: Replacements = { __SYMBOL__: symbol };
@@ -174,8 +174,6 @@ async function run(): Promise<void> {
     const ruleId =
       searchMode === "definition"
         ? "ts-symbol-definition"
-        : searchMode === "usage-expanded"
-        ? "ts-symbol-usage-expanded"
         : "ts-symbol-usage";
 
     const sgArgs = [

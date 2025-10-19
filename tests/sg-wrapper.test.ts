@@ -243,7 +243,7 @@ test("invalid mode parameter shows error", async () => {
   ]);
 
   expect(exitCode).toBe(1);
-  expect(stderr).toContain("--mode must be 'definition' or 'usage'");
+  expect(stderr).toContain("--mode must be 'definition', 'usage', or 'usage-expanded'");
 });
 
 test("missing symbol with mode shows error", async () => {

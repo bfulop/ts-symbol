@@ -72,8 +72,8 @@ if (positionals.length === 0) {
 
 // Validate mode parameter
 const mode = values.mode as string | undefined;
-if (mode && mode !== "definition" && mode !== "usage") {
-  console.error("error: --mode must be 'definition' or 'usage'");
+if (mode && mode !== "definition" && mode !== "usage" && mode !== "usage-expanded") {
+  console.error("error: --mode must be 'definition', 'usage', or 'usage-expanded'");
   process.exitCode = 1;
   process.exit();
 }
@@ -88,7 +88,7 @@ if (!values.symbol && (mode || (!values.funcName && !values.typeName))) {
 const funcName = values.funcName ?? "foo";
 const typeName = values.typeName ?? "Baz";
 const symbol = values.symbol ?? "MySymbol";
-const searchMode = (mode ?? "definition") as "definition" | "usage";
+const searchMode = (mode ?? "definition") as "definition" | "usage" | "usage-expanded";
 const jsonStyle = values.json ?? "stream";
 const unique = values.unique !== false; // default true
 const contextLines = values.context ? Math.max(0, Number(values.context)) : 6;
@@ -174,8 +174,8 @@ async function prepareRuleDirectories(
   for (const [index, dir] of ruleDirs.entries()) {
     const abs = resolve(configDir, dir);
     const dest = join(ruleRoot, `${index}-${basename(dir)}`);
-    await copyWithSubstitution(abs, dest, map);
-    nextRuleDirs.push(relative(tempDir, dest));
+await copyWithSubstitution(abs, dest, map);
+        nextRuleDirs.push(relative(tempDir, dest));
   }
 
   const utilDirs = Array.isArray(config.utilDirs) ? config.utilDirs : [];
@@ -219,7 +219,14 @@ async function run(): Promise<void> {
       filterArgs = ["--filter", "agent-target-usage"];
     } else if (values.symbol) {
       // When using symbol mode, filter by specific rule
-      const ruleId = searchMode === "definition" ? "ts-symbol-definition" : "ts-symbol-usage";
+      let ruleId: string;
+      if (searchMode === "definition") {
+        ruleId = "ts-symbol-definition";
+      } else if (searchMode === "usage-expanded") {
+        ruleId = "ts-symbol-usage-expanded";
+      } else {
+        ruleId = "ts-symbol-usage";
+      }
       filterArgs = ["--filter", ruleId];
     }
     // When using funcName or typeName, don't filter - let all rules run
@@ -285,7 +292,7 @@ async function run(): Promise<void> {
           }
 
           if (parsed) {
-            const results = await postProcess(parsed, contextLines, unique, values.symbol ? searchMode : undefined);
+            const results = await postProcess(parsed, contextLines, unique, values.symbol ? (searchMode === "usage-expanded" ? "usage" : searchMode) : undefined);
             if (format === "text") {
               for (const r of results) {
                 const file = (r.file as string) || (r.path as string) || (r.filePath as string) || "";

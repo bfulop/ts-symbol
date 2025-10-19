@@ -1,0 +1,39 @@
+id: ts-symbol-usage-expanded
+language: typescript
+rule:
+  any:
+    # Match entire variable declarations containing the symbol
+    - kind: variable_declarator
+      has:
+        kind: identifier
+        regex: '^__SYMBOL__$'
+    
+    # Match entire function declarations containing the symbol
+    - kind: function_declaration
+      has:
+        kind: identifier
+        regex: '^__SYMBOL__$'
+    
+    # Match entire arrow functions containing the symbol
+    - kind: arrow_function
+      has:
+        kind: identifier
+        regex: '^__SYMBOL__$'
+    
+    # Match entire return statements containing the symbol
+    - kind: return_statement
+      has:
+        kind: identifier
+        regex: '^__SYMBOL__$'
+    
+    # Match entire expression statements containing the symbol
+    - kind: expression_statement
+      has:
+        kind: identifier
+        regex: '^__SYMBOL__$'
+    
+    # Match entire assignment expressions containing the symbol
+    - kind: assignment_expression
+      has:
+        kind: identifier
+        regex: '^__SYMBOL__$'

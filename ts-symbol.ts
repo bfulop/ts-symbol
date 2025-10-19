@@ -27,7 +27,10 @@ async function runScan(mode: Mode, symbol: string, root?: string) {
       mode,
       "--unified",
       "false",
-      "--pretty",
+      "--format",
+      "text",
+      "--context",
+      "3",
       "--config",
       SGCONFIG,
     ],
@@ -46,12 +49,7 @@ async function runScan(mode: Mode, symbol: string, root?: string) {
 
   const out = stdout.trim()
   if (!out) throw new Error("Empty output from sg-wrapper")
-  try {
-    JSON.parse(out) // validate JSON
-    return out
-  } catch {
-    throw new Error("Invalid JSON from sg-wrapper")
-  }
+  return out
 }
 
 export const findDefinition = tool({

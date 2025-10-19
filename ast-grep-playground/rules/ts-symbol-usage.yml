@@ -1,5 +1,7 @@
 id: ts-symbol-usage
 language: typescript
+message: "Symbol usage: __SYMBOL__"
+severity: warning
 rule:
   any:
     # Function calls - direct identifier

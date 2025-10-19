@@ -227,7 +227,7 @@ async function run(): Promise<void> {
       } else {
         ruleId = "ts-symbol-usage";
       }
-      filterArgs = ["--filter", ruleId];
+      filterArgs = ["--filter", `^${ruleId}$`];
     }
     // When using funcName or typeName, don't filter - let all rules run
 
@@ -239,8 +239,6 @@ async function run(): Promise<void> {
           ...filterArgs,
           "-C",
           String(contextLines),
-          "--heading",
-          "always",
           ...positionals.map((path) => resolve(path)),
         ]
       : [

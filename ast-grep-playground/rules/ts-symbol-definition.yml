@@ -1,5 +1,7 @@
 id: ts-symbol-definition
 language: typescript
+message: "Symbol definition: __SYMBOL__"
+severity: warning
 rule:
   any:
     # Function declarations

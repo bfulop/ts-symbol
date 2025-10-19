@@ -1,0 +1,84 @@
+id: ts-symbol-definition
+language: typescript
+utils:
+  symbol-identifier:
+    kind: identifier
+    regex: '^__SYMBOL__$'
+  symbol-type-identifier:
+    kind: type_identifier
+    regex: '^__SYMBOL__$'
+rule:
+  any:
+    # Function declarations
+    - kind: function_declaration
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    # Variable declarations (const, let, var)
+    - kind: variable_declarator
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    # Class declarations
+    - kind: class_declaration
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    # Interface declarations
+    - kind: interface_declaration
+      has:
+        field: name
+        matches: symbol-type-identifier
+    
+    # Type alias declarations
+    - kind: type_alias_declaration
+      has:
+        field: name
+        matches: symbol-type-identifier
+    
+    # Enum declarations
+    - kind: enum_declaration
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    # Import named bindings
+    - kind: import_specifier
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    # Import default bindings
+    - kind: import_statement
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    # Export named specifier
+    - kind: export_specifier
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    # Method definitions in classes
+    - kind: method_definition
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    # Property definitions in interfaces
+    - kind: property_signature
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    # Type parameters
+    - kind: type_parameter
+      has:
+        field: name
+        matches: symbol-identifier
+    
+    

@@ -29,6 +29,9 @@ const { values, positionals } = parseArgs({
     typeName: {
       type: "string",
     },
+    symbol: {
+      type: "string",
+    },
     config: {
       type: "string",
     },
@@ -66,6 +69,7 @@ if (positionals.length === 0) {
 
 const funcName = values.funcName ?? "foo";
 const typeName = values.typeName ?? "Baz";
+const symbol = values.symbol ?? "MySymbol";
 const jsonStyle = values.json ?? "stream";
 const unique = values.unique !== false; // default true
 const contextLines = values.context ? Math.max(0, Number(values.context)) : 6;
@@ -86,6 +90,7 @@ const nativeMode = values.native === true;
 const replacements: Replacements = {
   __FUNC_NAME__: funcName,
   __TYPE_NAME__: typeName,
+  __SYMBOL__: symbol,
 };
 
 const configPath = resolve(

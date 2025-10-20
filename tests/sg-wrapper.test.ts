@@ -153,6 +153,23 @@ test("defaults to definition mode", async () => {
   expect(blocks.some((b) => b.includes("function MySymbol()"))).toBe(true);
 });
 
+test("definition mode ignores import-only references", async () => {
+  const { exitCode, stdout, stderr } = await runCli([
+    "test-fixtures/definition-imports.ts",
+    "--symbol",
+    "MySymbol",
+    "--mode",
+    "definition",
+    "--config",
+    CONFIG_PATH,
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  const blocks = extractCodeBlocks(stdout);
+  expect(blocks.length).toBe(0);
+});
+
 test("usage mode emits blocks for tsx files", async () => {
   const tmpDir = await mkdtemp(join(tmpdir(), "sg-wrapper-tsx-"));
   const filePath = join(tmpDir, "SampleComponent.tsx");

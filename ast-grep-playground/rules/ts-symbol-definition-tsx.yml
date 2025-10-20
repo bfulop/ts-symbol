@@ -46,20 +46,6 @@ rule:
         kind: identifier
         regex: '^__SYMBOL__$'
 
-    # Import named bindings
-    - kind: import_specifier
-      has:
-        field: name
-        kind: identifier
-        regex: '^__SYMBOL__$'
-
-    # Import default bindings
-    - kind: import_statement
-      has:
-        field: name
-        kind: identifier
-        regex: '^__SYMBOL__$'
-
     # Export named specifier
     - kind: export_specifier
       has:
@@ -87,4 +73,3 @@ rule:
         field: name
         kind: identifier
         regex: '^__SYMBOL__$'
-

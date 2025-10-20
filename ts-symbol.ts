@@ -1,3 +1,11 @@
+/**
+ * Semantic TypeScript symbol lookup.
+ * Returns one or more blocks. Each block starts with:
+ *   <path>:<startLine>-<endLine>
+ * Followed by the exact code for that range.
+ * Callers MUST print the tool response exactly, without truncation or reformatting.
+ * Do not wrap in markdown fences. Do not summarize inside the block.
+ */
 import { tool } from "@opencode-ai/plugin";
 import { homedir } from "os";
 import { resolve, join } from "path";
@@ -67,7 +75,8 @@ export const findDefinition = tool({
 });
 
 export const findUsage = tool({
-  description: "Find TypeScript symbol usages in the repository",
+  description:
+    "Find TypeScript symbol usages in the repository. Each block starts with: <path>:<startLine>-<endLine>",
   args: {
     symbol: tool.schema
       .string()

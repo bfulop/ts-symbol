@@ -171,10 +171,10 @@ async function run(): Promise<void> {
     await writeFile(generatedConfigPath, YAML.stringify(generatedConfig));
 
     // Filter by ruleId based on requested mode
-    const ruleId =
+    const rulePattern =
       searchMode === "definition"
-        ? "ts-symbol-definition"
-        : "ts-symbol-usage";
+        ? "^ts-symbol-definition(-tsx)?$"
+        : "^ts-symbol-usage(-tsx)?$";
 
     const sgArgs = [
       "scan",
@@ -183,7 +183,7 @@ async function run(): Promise<void> {
       `--json=stream`,
       "--include-metadata",
       "--filter",
-      `^${ruleId}$`,
+      rulePattern,
       ...positionals.map((path) => resolve(path)),
     ];
 
@@ -282,7 +282,11 @@ async function toCodeBlocks(objs: MatchObj[], ctx: number): Promise<string[]> {
       snippet = lines.slice(start - 1, end).join("\n");
     }
 
-    if (snippet) blocks.push(snippet);
+    if (!snippet) continue;
+
+    const relPath = relative(process.cwd(), loc.file);
+    const header = `// path: ${relPath}:${start}-${end}`;
+    blocks.push(`${header}\n${snippet}`.trimEnd());
   }
   return blocks;
 }

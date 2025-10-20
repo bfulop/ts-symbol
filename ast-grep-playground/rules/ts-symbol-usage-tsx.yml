@@ -1,0 +1,54 @@
+id: ts-symbol-usage-tsx
+language: tsx
+message: "Symbol usage: __SYMBOL__"
+severity: warning
+utils:
+  symbol-leaf:
+    any:
+      - kind: identifier
+        regex: '^__SYMBOL__$'
+      - kind: property_identifier
+        regex: '^__SYMBOL__$'
+      - kind: type_identifier
+        regex: '^__SYMBOL__$'
+rule:
+  any:
+    - kind: function_declaration
+      has:
+        stopBy: end
+        matches: symbol-leaf
+    - kind: method_definition
+      has:
+        stopBy: end
+        matches: symbol-leaf
+    - kind: class_declaration
+      has:
+        stopBy: end
+        matches: symbol-leaf
+    - kind: interface_declaration
+      has:
+        stopBy: end
+        matches: symbol-leaf
+    - kind: type_alias_declaration
+      has:
+        stopBy: end
+        matches: symbol-leaf
+    - kind: enum_declaration
+      has:
+        stopBy: end
+        matches: symbol-leaf
+    - kind: variable_declarator
+      has:
+        stopBy: end
+        matches: symbol-leaf
+      not:
+        inside:
+          kind: lexical_declaration
+          inside:
+            kind: statement_block
+    - kind: expression_statement
+      has:
+        matches: symbol-leaf
+      not:
+        inside:
+          kind: statement_block

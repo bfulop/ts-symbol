@@ -60,11 +60,11 @@ rule:
         kind: identifier
         regex: '^__SYMBOL__$'
 
-    # Property definitions in interfaces
+    # Property definitions in interfaces/type literals
     - kind: property_signature
       has:
         field: name
-        kind: identifier
+        kind: property_identifier
         regex: '^__SYMBOL__$'
 
     # Type parameters

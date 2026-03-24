@@ -1,9 +1,14 @@
 {
-  "name": "bun-react-template",
+  "name": "ts-symbol",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "bin": {
+    "ts-symbol": "./src/cli/ts-symbol.ts"
+  },
   "scripts": {
+    "cli": "bun run src/cli/ts-symbol.ts",
+    "ts-symbol": "bun run src/cli/ts-symbol.ts",
+    "test": "bun test",
     "dev": "bun --hot src/index.tsx",
     "build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
     "start": "NODE_ENV=production bun src/index.tsx"

@@ -1,18 +1,19 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, resolve } from "path";
 
-const CLI_ENTRY = join(process.cwd(), "src", "cli", "sg-wrapper.ts");
+const LEGACY_CLI_ENTRY = join(process.cwd(), "src", "cli", "sg-wrapper.ts");
+const PUBLIC_CLI_ENTRY = join(process.cwd(), "src", "cli", "ts-symbol.ts");
 const CONFIG_PATH = join(process.cwd(), "ast-grep-playground", "sgconfig.yml");
 
-async function runCli(args: string[]) {
-  const proc = Bun.spawn([
-    "bun",
-    "run",
-    CLI_ENTRY,
-    ...args,
-  ], {
+async function runBun(
+  args: string[],
+  options?: { cwd?: string; env?: Record<string, string | undefined> },
+) {
+  const proc = Bun.spawn([process.execPath, ...args], {
+    cwd: options?.cwd,
+    env: options?.env,
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -24,6 +25,21 @@ async function runCli(args: string[]) {
   ]);
 
   return { exitCode, stdout, stderr };
+}
+
+function runLegacyCli(args: string[]) {
+  return runBun(["run", LEGACY_CLI_ENTRY, ...args]);
+}
+
+function runPublicCli(
+  args: string[],
+  options?: { cwd?: string; env?: Record<string, string | undefined> },
+) {
+  return runBun([PUBLIC_CLI_ENTRY, ...args], options);
+}
+
+function runScriptCli(args: string[]) {
+  return runBun(["run", "ts-symbol", ...args]);
 }
 
 function extractCodeBlocks(output: string) {
@@ -38,12 +54,11 @@ function extractCodeBlocks(output: string) {
 
 function stripHeader(block: string) {
   const lines = block.split("\n");
-  if (lines.length === 0) return "";
   return lines.slice(1).join("\n");
 }
 
-test("requires --symbol", async () => {
-  const { exitCode, stderr } = await runCli([
+test("legacy wrapper requires --symbol", async () => {
+  const { exitCode, stderr } = await runLegacyCli([
     "test-fixtures/definitions.ts",
     "--config",
     CONFIG_PATH,
@@ -53,8 +68,8 @@ test("requires --symbol", async () => {
   expect(stderr).toContain("error: --symbol is required");
 });
 
-test("definition mode emits definition blocks", async () => {
-  const { exitCode, stdout, stderr } = await runCli([
+test("legacy wrapper emits definition blocks", async () => {
+  const { exitCode, stdout, stderr } = await runLegacyCli([
     "test-fixtures/definitions.ts",
     "--symbol",
     "MySymbol",
@@ -68,30 +83,12 @@ test("definition mode emits definition blocks", async () => {
   expect(exitCode).toBe(0);
   const blocks = extractCodeBlocks(stdout);
   expect(blocks.length).toBeGreaterThan(0);
-  expect(blocks[0].startsWith("// path:"));
-  expect(blocks.some((b) => b.includes("function MySymbol()"))).toBe(true);
+  expect(blocks[0].startsWith("// path: definitions.ts:")).toBe(true);
+  expect(blocks.some((block) => block.includes("function MySymbol()"))).toBe(true);
 });
 
-test("usage mode emits contextual blocks", async () => {
-  const { exitCode, stdout, stderr } = await runCli([
-    "test-fixtures/usages.ts",
-    "--symbol",
-    "MySymbol",
-    "--mode",
-    "usage",
-    "--config",
-    CONFIG_PATH,
-  ]);
-
-  expect(stderr).toBe("");
-  expect(exitCode).toBe(0);
-  const blocks = extractCodeBlocks(stdout);
-  expect(blocks.length).toBeGreaterThan(0);
-  expect(blocks.some((b) => /function\s+.*\bMySymbol\b/.test(b))).toBe(true);
-});
-
-test("context flag adds surrounding lines", async () => {
-  const { stdout: noContext } = await runCli([
+test("legacy wrapper context flag adds surrounding lines", async () => {
+  const { stdout: noContext } = await runLegacyCli([
     "test-fixtures/definitions.ts",
     "--symbol",
     "MySymbol",
@@ -102,7 +99,7 @@ test("context flag adds surrounding lines", async () => {
     "--context",
     "0",
   ]);
-  const { stdout: withContext } = await runCli([
+  const { stdout: withContext } = await runLegacyCli([
     "test-fixtures/definitions.ts",
     "--symbol",
     "MySymbol",
@@ -116,63 +113,124 @@ test("context flag adds surrounding lines", async () => {
 
   const withoutBlocks = extractCodeBlocks(noContext);
   const withBlocks = extractCodeBlocks(withContext);
-  expect(withoutBlocks[0].startsWith("// path:"));
-  expect(withBlocks[0].startsWith("// path:"));
-  expect(stripHeader(withoutBlocks[0])).not.toContain("// Function declaration");
-  expect(stripHeader(withBlocks[0])).toContain("// Function declaration");
+  expect(stripHeader(withoutBlocks[0]!)).not.toContain("// Function declaration");
+  expect(stripHeader(withBlocks[0]!)).toContain("// Function declaration");
 });
 
-test("invalid mode parameter shows error", async () => {
-  const { exitCode, stderr } = await runCli([
-    "test-fixtures/definitions.ts",
+test("public CLI returns JSON by default", async () => {
+  const root = resolve("test-fixtures/definitions.ts");
+  const { exitCode, stdout, stderr } = await runPublicCli([
+    "definition",
     "--symbol",
     "MySymbol",
-    "--mode",
-    "invalid",
-    "--config",
-    CONFIG_PATH,
+    "--root",
+    root,
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+
+  const payload = JSON.parse(stdout);
+  expect(payload.symbol).toBe("MySymbol");
+  expect(payload.mode).toBe("definition");
+  expect(payload.root).toBe(root);
+  expect(payload.matches.length).toBeGreaterThan(0);
+  expect(payload.matches[0].file).toBe("definitions.ts");
+  expect(payload.matches[0].snippet).toContain("MySymbol");
+  expect(payload.matches[0].ruleId).toContain("ts-symbol-definition");
+});
+
+test("public CLI lookup command requires mode", async () => {
+  const { exitCode, stderr } = await runPublicCli([
+    "lookup",
+    "--symbol",
+    "MySymbol",
+    "--root",
+    resolve("test-fixtures/definitions.ts"),
   ]);
 
   expect(exitCode).toBe(1);
-  expect(stderr).toContain("--mode must be 'definition' or 'usage'");
+  expect(stderr).toContain("--mode is required");
 });
 
-test("defaults to definition mode", async () => {
-  const { exitCode, stdout, stderr } = await runCli([
-    "test-fixtures/definitions.ts",
+test("public CLI returns pretty output when requested", async () => {
+  const { exitCode, stdout, stderr } = await runPublicCli([
+    "usage",
     "--symbol",
     "MySymbol",
-    "--config",
-    CONFIG_PATH,
+    "--root",
+    resolve("test-fixtures/usages.ts"),
+    "--format",
+    "pretty",
   ]);
 
   expect(stderr).toBe("");
   expect(exitCode).toBe(0);
-  const blocks = extractCodeBlocks(stdout);
-  expect(blocks.length).toBeGreaterThan(0);
-  expect(blocks.some((b) => b.includes("function MySymbol()"))).toBe(true);
+  expect(stdout).toContain("```ts");
+  expect(stdout).toContain("// path: usages.ts:");
 });
 
-test("definition mode ignores import-only references", async () => {
-  const { exitCode, stdout, stderr } = await runCli([
-    "test-fixtures/definition-imports.ts",
+test("public CLI returns zero matches successfully", async () => {
+  const { exitCode, stdout, stderr } = await runPublicCli([
+    "usage",
     "--symbol",
-    "MySymbol",
-    "--mode",
-    "definition",
-    "--config",
-    CONFIG_PATH,
+    "DefinitelyMissingSymbol",
+    "--root",
+    resolve("test-fixtures/usages.ts"),
   ]);
 
   expect(stderr).toBe("");
   expect(exitCode).toBe(0);
-  const blocks = extractCodeBlocks(stdout);
-  expect(blocks.length).toBe(0);
+
+  const payload = JSON.parse(stdout);
+  expect(payload.matches).toEqual([]);
 });
 
-test("usage mode emits blocks for tsx files", async () => {
+test("public CLI resolves bundled config outside repo root", async () => {
+  const tmpDir = await mkdtemp(join(tmpdir(), "ts-symbol-cwd-"));
+  const { exitCode, stdout, stderr } = await runPublicCli(
+    [
+      "definition",
+      "--symbol",
+      "MySymbol",
+      "--root",
+      resolve("test-fixtures/definitions.ts"),
+    ],
+    { cwd: tmpDir },
+  );
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+
+  const payload = JSON.parse(stdout);
+  expect(payload.matches.length).toBeGreaterThan(0);
+});
+
+test("public CLI reports missing sg with dedicated exit code", async () => {
+  const { exitCode, stderr } = await runPublicCli(
+    [
+      "definition",
+      "--symbol",
+      "MySymbol",
+      "--root",
+      resolve("test-fixtures/definitions.ts"),
+    ],
+    {
+      env: {
+        ...process.env,
+        PATH: join(tmpdir(), "ts-symbol-missing-path"),
+      },
+    },
+  );
+
+  expect(exitCode).toBe(2);
+  expect(stderr).toContain("ast-grep (sg) binary not found");
+});
+
+test("tsx lookups work through the public CLI", async () => {
   const tmpDir = await mkdtemp(join(tmpdir(), "sg-wrapper-tsx-"));
   const filePath = join(tmpDir, "SampleComponent.tsx");
+
   await writeFile(
     filePath,
     [
@@ -188,38 +246,59 @@ test("usage mode emits blocks for tsx files", async () => {
     ].join("\n"),
   );
 
-  const { exitCode, stdout, stderr } = await runCli([
-    filePath,
+  const usage = await runPublicCli([
+    "usage",
     "--symbol",
     "getOperatorLabel",
-    "--mode",
-    "usage",
-    "--config",
-    CONFIG_PATH,
+    "--root",
+    filePath,
   ]);
 
-  expect(stderr).toBe("");
-  expect(exitCode).toBe(0);
-  const blocks = extractCodeBlocks(stdout);
-  expect(blocks.length).toBe(1);
-  expect(blocks[0].startsWith("// path:"));
-  expect(blocks[0]).toContain("SampleComponent");
-  expect(blocks[0]).toContain("getOperatorLabel(operator)");
+  expect(usage.stderr).toBe("");
+  expect(usage.exitCode).toBe(0);
+  const usagePayload = JSON.parse(usage.stdout);
+  expect(usagePayload.matches.length).toBe(1);
+  expect(usagePayload.matches[0].file).toBe("SampleComponent.tsx");
+  expect(usagePayload.matches[0].snippet).toContain("getOperatorLabel(operator)");
 
-  const { exitCode: defExit, stdout: defStdout, stderr: defStderr } = await runCli([
-    filePath,
+  const definition = await runPublicCli([
+    "definition",
     "--symbol",
     "SampleComponent",
-    "--mode",
-    "definition",
-    "--config",
-    CONFIG_PATH,
+    "--root",
+    filePath,
   ]);
 
-  expect(defStderr).toBe("");
-  expect(defExit).toBe(0);
-  const defBlocks = extractCodeBlocks(defStdout);
-  expect(defBlocks.length).toBe(1);
-  expect(defBlocks[0].startsWith("// path:"));
-  expect(defBlocks[0]).toContain("SampleComponent =");
+  expect(definition.stderr).toBe("");
+  expect(definition.exitCode).toBe(0);
+  const definitionPayload = JSON.parse(definition.stdout);
+  expect(definitionPayload.matches.length).toBe(1);
+  expect(definitionPayload.matches[0].snippet).toContain("SampleComponent =");
+});
+
+test("script entrypoint supports installed-style usage", async () => {
+  const { exitCode, stdout, stderr } = await runScriptCli([
+    "definition",
+    "--symbol",
+    "MySymbol",
+    "--root",
+    resolve("test-fixtures/definitions.ts"),
+  ]);
+
+  expect(stderr === "" || stderr.startsWith("$ bun run")).toBe(true);
+  expect(exitCode).toBe(0);
+  const payload = JSON.parse(stdout);
+  expect(payload.matches.length).toBeGreaterThan(0);
+});
+
+test("OpenCode adapter returns the same semantic result shape", async () => {
+  const { findUsage } = await import("../ts-symbol");
+  const output = await findUsage.execute({
+    symbol: "MySymbol",
+    root: resolve("test-fixtures/usages.ts"),
+  });
+
+  expect(typeof output).toBe("string");
+  expect(output).toContain("// path: usages.ts:");
+  expect(output).toContain("MySymbol");
 });

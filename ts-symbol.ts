@@ -6,88 +6,85 @@
  * Callers MUST print the tool response exactly, without truncation or reformatting.
  * Do not wrap in markdown fences. Do not summarize inside the block.
  */
-import { tool } from "@opencode-ai/plugin";
 import { homedir } from "os";
-import { resolve, join } from "path";
+import { join, resolve } from "path";
+import {
+  formatPrettyResult,
+  lookupSymbol,
+  type SymbolLookupMode,
+} from "./src/lib/ts-symbol-scan";
 
-const WRAPPER = "/Users/balint.fulop/Work2/astGrep/src/cli/sg-wrapper.ts";
-const SGCONFIG =
-  "/Users/balint.fulop/Work2/astGrep/ast-grep-playground/sgconfig.yml";
 const DEFAULT_ROOT = "~/Work/pulsar";
 
-type Mode = "definition" | "usage";
+type LookupArgs = { symbol: string; root?: string };
+type ToolFactory = {
+  schema: {
+    string(): {
+      min(value: number): any;
+      optional(): any;
+      describe(text: string): any;
+    };
+  };
+  <T>(definition: T): T;
+};
 
-function expandTilde(p: string) {
-  return p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
+function expandTilde(value: string) {
+  return value.startsWith("~/") ? join(homedir(), value.slice(2)) : value;
 }
 
-async function runScan(mode: Mode, symbol: string, root?: string) {
+async function runScan(mode: SymbolLookupMode, symbol: string, root?: string) {
   const rootPath = resolve(expandTilde(root ?? DEFAULT_ROOT));
+  const result = await lookupSymbol({
+    symbol,
+    mode,
+    root: rootPath,
+    context: 0,
+  });
 
-  const proc = Bun.spawn(
-    [
-      "bun",
-      "run",
-      WRAPPER,
-      rootPath,
-      "--symbol",
-      symbol,
-      "--mode",
-      mode,
-      "--context",
-      "0",
-      "--config",
-      SGCONFIG,
-    ],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  return formatPrettyResult(result).trim();
+}
 
-  const [exitCode, stdout, stderr] = await Promise.all([
-    proc.exited,
-    proc.stdout?.text() ?? Promise.resolve(""),
-    proc.stderr?.text() ?? Promise.resolve(""),
-  ]);
+const opencode = await import("@opencode-ai/plugin").catch(() => null);
+const toolFactory = (opencode?.tool ?? null) as ToolFactory | null;
 
-  if (exitCode !== 0) {
-    throw new Error((stderr || "sg-wrapper failed").trim());
+function createLookupTool(mode: SymbolLookupMode, description: string) {
+  if (!toolFactory) {
+    return {
+      description,
+      args: {
+        symbol: { type: "string", required: true },
+        root: { type: "string", required: false },
+      },
+      async execute(args: LookupArgs) {
+        return runScan(mode, args.symbol, args.root);
+      },
+    };
   }
 
-  const out = stdout.trim();
-  if (!out) throw new Error("Empty output from sg-wrapper");
-  return out;
+  return toolFactory({
+    description,
+    args: {
+      symbol: toolFactory.schema
+        .string()
+        .min(1)
+        .describe("Symbol identifier to search for"),
+      root: toolFactory.schema
+        .string()
+        .optional()
+        .describe("Repository root (defaults to ~/Work/pulsar)"),
+    },
+    async execute(args: LookupArgs) {
+      return runScan(mode, args.symbol, args.root);
+    },
+  });
 }
 
-export const findDefinition = tool({
-  description: "Find TypeScript symbol definitions in the repository",
-  args: {
-    symbol: tool.schema
-      .string()
-      .min(1)
-      .describe("Symbol identifier to search for"),
-    root: tool.schema
-      .string()
-      .optional()
-      .describe("Repository root (defaults to ~/Work/pulsar)"),
-  },
-  async execute(args: { symbol: string; root?: string }) {
-    return runScan("definition", args.symbol, args.root);
-  },
-});
+export const findDefinition = createLookupTool(
+  "definition",
+  "Find TypeScript symbol definitions in the repository",
+);
 
-export const findUsage = tool({
-  description:
-    "Find TypeScript symbol usages in the repository. Each block starts with: <path>:<startLine>-<endLine>",
-  args: {
-    symbol: tool.schema
-      .string()
-      .min(1)
-      .describe("Symbol identifier to search for"),
-    root: tool.schema
-      .string()
-      .optional()
-      .describe("Repository root (defaults to ~/Work/pulsar)"),
-  },
-  async execute(args: { symbol: string; root?: string }) {
-    return runScan("usage", args.symbol, args.root);
-  },
-});
+export const findUsage = createLookupTool(
+  "usage",
+  "Find TypeScript symbol usages in the repository. Each block starts with: <path>:<startLine>-<endLine>",
+);

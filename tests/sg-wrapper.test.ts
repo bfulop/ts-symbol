@@ -462,6 +462,51 @@ test("tsx lookups work through the public CLI", async () => {
   expect(definitionPayload.matches[0].snippet).toContain("SampleComponent =");
 });
 
+test("structural context marks PascalCase function declarations as components in TSX", async () => {
+  const tmpDir = await mkdtemp(join(tmpdir(), "sg-wrapper-tsx-component-"));
+  const filePath = join(tmpDir, "UserCard.tsx");
+
+  await writeFile(
+    filePath,
+    [
+      "type Props = { label: string };",
+      "",
+      "function UserCard({ label }: Props) {",
+      "  return <span>{label}</span>;",
+      "}",
+      "",
+      "export function renderCard() {",
+      "  return <UserCard label=\"hi\" />;",
+      "}",
+    ].join("\n"),
+  );
+
+  const usage = await runPublicCli([
+    "usage",
+    "--symbol",
+    "label",
+    "--root",
+    filePath,
+    "--context-depth",
+    "structural",
+  ]);
+
+  expect(usage.stderr).toBe("");
+  expect(usage.exitCode).toBe(0);
+
+  const payload = JSON.parse(usage.stdout);
+  const componentMatch = payload.matches.find((match: any) =>
+    match.snippet.includes("{label}"),
+  );
+
+  expect(componentMatch?.enclosingSymbol).toEqual({
+    name: "UserCard",
+    kind: "component",
+    startLine: 3,
+    endLine: 5,
+  });
+});
+
 test("script entrypoint supports installed-style usage", async () => {
   const { exitCode, stdout, stderr } = await runScriptCli([
     "definition",

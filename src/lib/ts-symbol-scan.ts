@@ -793,12 +793,22 @@ function inferEnclosingSymbol(
   endLine: number | undefined,
 ): EnclosingSymbol | undefined {
   const firstLine = lines[Math.max(0, normalizeLine(startLine) - 1)] ?? "";
-  const decl = inferDeclarationFromLine(firstLine, normalizeLine(startLine), normalizeLine(endLine));
+  const decl = inferDeclarationFromLine(
+    firstLine,
+    normalizeLine(startLine),
+    normalizeLine(endLine),
+    lines,
+  );
   if (decl) return decl;
 
   const lineNumber = normalizeLine(startLine);
   for (let index = lineNumber - 1; index >= Math.max(0, lineNumber - 25); index -= 1) {
-    const candidate = inferDeclarationFromLine(lines[index] ?? "", index + 1, index + 1);
+    const candidate = inferDeclarationFromLine(
+      lines[index] ?? "",
+      index + 1,
+      index + 1,
+      lines,
+    );
     if (candidate) return candidate;
   }
 
@@ -809,6 +819,7 @@ function inferDeclarationFromLine(
   line: string,
   startLine: number,
   endLine: number,
+  lines: string[] = [],
 ): EnclosingSymbol | undefined {
   const variable = line.match(
     /^\s*(?:export\s+)?(const|let|var)\s+([A-Za-z_$][\w$]*)\b/,
@@ -830,7 +841,7 @@ function inferDeclarationFromLine(
     const [, name] = fn;
     return {
       name,
-      kind: "function",
+      kind: inferFunctionKind(lines, name, startLine),
       startLine,
       endLine,
     };
@@ -872,8 +883,33 @@ function inferVariableKind(
   return keyword;
 }
 
+function inferFunctionKind(
+  lines: string[],
+  name: string,
+  startLine: number,
+): EnclosingSymbol["kind"] {
+  if (isComponentName(name) && hasNearbyJsx(lines, startLine)) {
+    return "component";
+  }
+  return "function";
+}
+
 function isComponentName(name: string): boolean {
   return /^[A-Z]/.test(name);
+}
+
+function hasNearbyJsx(lines: string[], startLine: number): boolean {
+  const jsxPattern = /<\/?[A-Za-z][\w.: -]*[/> ]/;
+  const begin = Math.max(0, startLine - 1);
+  const end = Math.min(lines.length, begin + 12);
+
+  for (let index = begin; index < end; index += 1) {
+    if (jsxPattern.test(lines[index] ?? "")) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function normalizeColumn(value: unknown): number {

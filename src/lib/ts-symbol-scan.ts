@@ -245,6 +245,11 @@ function formatPrettyMatchContext(match: SymbolLookupMatch): string[] {
     lines.push(`// usageKind: ${match.usageKind}`);
   }
 
+  const prettyLabel = inferPrettyMatchLabel(match);
+  if (prettyLabel) {
+    lines.push(`// note: ${prettyLabel}`);
+  }
+
   if (match.enclosingSymbol) {
     lines.push(
       `// enclosingSymbol: ${match.enclosingSymbol.name} (${match.enclosingSymbol.kind}) ${match.enclosingSymbol.startLine}-${match.enclosingSymbol.endLine}`,
@@ -270,6 +275,27 @@ function formatPrettyMatchContext(match: SymbolLookupMatch): string[] {
   }
 
   return lines;
+}
+
+function inferPrettyMatchLabel(match: SymbolLookupMatch): string | undefined {
+  if (match.usageKind === "import") {
+    return "import-only usage";
+  }
+
+  if (match.usageKind === "reexport") {
+    return "re-export usage";
+  }
+
+  if (
+    match.ancestorPath?.some((entry) => entry.kind === "ExportNamedDeclaration") &&
+    match.enclosingSymbol &&
+    ["const", "let", "var", "component"].includes(match.enclosingSymbol.kind) &&
+    ["initializer", "call", "value_reference"].includes(match.usageKind ?? "unknown")
+  ) {
+    return "exported initializer";
+  }
+
+  return undefined;
 }
 
 async function ensureSgAvailable(): Promise<void> {

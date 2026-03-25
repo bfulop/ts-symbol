@@ -195,6 +195,60 @@ test("public CLI pretty output includes structural summaries when context is ena
   );
 });
 
+test("public CLI pretty output highlights import-only and exported initializer matches", async () => {
+  const importResult = await runPublicCli([
+    "usage",
+    "--symbol",
+    "ImportedOnlySymbol",
+    "--root",
+    resolve("test-fixtures/pretty-context-cases.ts"),
+    "--format",
+    "pretty",
+    "--context-depth",
+    "structural",
+  ]);
+
+  expect(importResult.stderr).toBe("");
+  expect(importResult.exitCode).toBe(0);
+  expect(importResult.stdout).toContain("// usageKind: import");
+  expect(importResult.stdout).toContain("// note: import-only usage");
+
+  const reexportResult = await runPublicCli([
+    "usage",
+    "--symbol",
+    "ReExportedSymbol",
+    "--root",
+    resolve("test-fixtures/pretty-context-cases.ts"),
+    "--format",
+    "pretty",
+    "--context-depth",
+    "structural",
+  ]);
+
+  expect(reexportResult.stderr).toBe("");
+  expect(reexportResult.exitCode).toBe(0);
+  expect(reexportResult.stdout).toContain("// usageKind: reexport");
+  expect(reexportResult.stdout).toContain("// note: re-export usage");
+
+  const initializerResult = await runPublicCli([
+    "usage",
+    "--symbol",
+    "withComparisonMode",
+    "--root",
+    resolve("test-fixtures/pretty-context-cases.ts"),
+    "--format",
+    "pretty",
+    "--context-depth",
+    "structural",
+  ]);
+
+  expect(initializerResult.stderr).toBe("");
+  expect(initializerResult.exitCode).toBe(0);
+  expect(initializerResult.stdout).toContain("// usageKind: call");
+  expect(initializerResult.stdout).toContain("// note: exported initializer");
+  expect(initializerResult.stdout).toContain("// enclosingSymbol: buildValue (const) 6-6");
+});
+
 test("public CLI returns zero matches successfully", async () => {
   const { exitCode, stdout, stderr } = await runPublicCli([
     "usage",
@@ -474,9 +528,18 @@ test("tsx lookups work through the public CLI", async () => {
   expect(usage.stderr).toBe("");
   expect(usage.exitCode).toBe(0);
   const usagePayload = JSON.parse(usage.stdout);
-  expect(usagePayload.matches.length).toBe(1);
-  expect(usagePayload.matches[0].file).toBe("SampleComponent.tsx");
-  expect(usagePayload.matches[0].snippet).toContain("getOperatorLabel(operator)");
+  expect(usagePayload.matches.length).toBe(2);
+  expect(usagePayload.matches.every((match: any) => match.file === "SampleComponent.tsx")).toBe(true);
+  expect(
+    usagePayload.matches.some((match: any) =>
+      match.snippet.includes("import { getOperatorLabel } from './helpers';"),
+    ),
+  ).toBe(true);
+  expect(
+    usagePayload.matches.some((match: any) =>
+      match.snippet.includes("getOperatorLabel(operator)"),
+    ),
+  ).toBe(true);
 
   const definition = await runPublicCli([
     "definition",

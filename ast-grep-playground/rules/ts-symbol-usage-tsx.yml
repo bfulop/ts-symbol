@@ -52,3 +52,14 @@ rule:
       not:
         inside:
           kind: statement_block
+    - kind: import_statement
+      has:
+        stopBy: end
+        matches: symbol-leaf
+    - kind: export_statement
+      has:
+        stopBy: end
+        kind: export_specifier
+        has:
+          stopBy: end
+          matches: symbol-leaf

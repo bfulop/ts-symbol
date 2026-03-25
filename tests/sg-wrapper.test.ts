@@ -170,6 +170,28 @@ test("public CLI returns pretty output when requested", async () => {
   expect(stdout).toContain("// path: usages.ts:");
 });
 
+test("public CLI pretty output includes structural summaries when context is enabled", async () => {
+  const { exitCode, stdout, stderr } = await runPublicCli([
+    "usage",
+    "--symbol",
+    "getOperatorLabel",
+    "--root",
+    resolve("test-fixtures/usages-expanded-context.ts"),
+    "--format",
+    "pretty",
+    "--context-depth",
+    "relationships",
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain("// usageKind: call");
+  expect(stdout).toContain("// enclosingSymbol: result (const) 42-42");
+  expect(stdout).toContain(
+    "// contextSymbols: initializer_target:result, callee:getOperatorLabel, argument:operator",
+  );
+});
+
 test("public CLI returns zero matches successfully", async () => {
   const { exitCode, stdout, stderr } = await runPublicCli([
     "usage",

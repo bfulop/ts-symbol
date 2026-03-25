@@ -228,10 +228,37 @@ export function formatPrettyResult(result: SymbolLookupResult): string {
 
   return result.matches
     .map((match) => {
-      const header = `// path: ${match.file}:${match.startLine}-${match.endLine}`;
-      return ["```ts", `${header}\n${match.snippet}`.trimEnd(), "```"].join("\n");
+      const lines = [
+        `// path: ${match.file}:${match.startLine}-${match.endLine}`,
+        ...formatPrettyMatchContext(match),
+        match.snippet,
+      ];
+      return ["```ts", lines.join("\n").trimEnd(), "```"].join("\n");
     })
     .join("\n\n");
+}
+
+function formatPrettyMatchContext(match: SymbolLookupMatch): string[] {
+  const lines: string[] = [];
+
+  if (match.usageKind) {
+    lines.push(`// usageKind: ${match.usageKind}`);
+  }
+
+  if (match.enclosingSymbol) {
+    lines.push(
+      `// enclosingSymbol: ${match.enclosingSymbol.name} (${match.enclosingSymbol.kind}) ${match.enclosingSymbol.startLine}-${match.enclosingSymbol.endLine}`,
+    );
+  }
+
+  if (match.contextSymbols && match.contextSymbols.length > 0) {
+    const summary = match.contextSymbols
+      .map((symbol) => `${symbol.role}:${symbol.name}`)
+      .join(", ");
+    lines.push(`// contextSymbols: ${summary}`);
+  }
+
+  return lines;
 }
 
 async function ensureSgAvailable(): Promise<void> {

@@ -53,7 +53,9 @@ bun run ts-symbol usage --symbol UserService --root /path/to/repo --format prett
   `json` is the default output mode and is intended for agents.
 - `--format pretty`
   returns fenced code blocks with `// path: ...` headers for humans.
-- `--context <N>`
+- `--context`
+  enables structural context on JSON matches, including `usageKind` and `enclosingSymbol`.
+- `--snippet-context <N>`
   expands each snippet by `N` lines of context on both sides.
 - `--context-depth structural`
   adds `usageKind`, `enclosingSymbol`, and `ancestorPath` to JSON matches.

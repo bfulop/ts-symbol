@@ -193,8 +193,7 @@ test("public CLI adds structural context for usage matches when requested", asyn
     "MySymbol",
     "--root",
     resolve("test-fixtures/usages.ts"),
-    "--context-depth",
-    "structural",
+    "--context",
   ]);
 
   expect(stderr).toBe("");
@@ -233,6 +232,36 @@ test("public CLI adds structural context for usage matches when requested", asyn
     { kind: "FunctionDeclaration", name: "callWithSymbol" },
     { kind: "ReturnStatement", name: "MySymbol" },
   ]);
+});
+
+test("public CLI preserves legacy numeric --context as snippet expansion", async () => {
+  const { stdout: noContext } = await runPublicCli([
+    "definition",
+    "--symbol",
+    "MySymbol",
+    "--root",
+    resolve("test-fixtures/definitions.ts"),
+    "--format",
+    "pretty",
+    "--context",
+    "0",
+  ]);
+  const { stdout: withContext } = await runPublicCli([
+    "definition",
+    "--symbol",
+    "MySymbol",
+    "--root",
+    resolve("test-fixtures/definitions.ts"),
+    "--format",
+    "pretty",
+    "--context",
+    "1",
+  ]);
+
+  const withoutBlocks = extractCodeBlocks(noContext);
+  const withBlocks = extractCodeBlocks(withContext);
+  expect(stripHeader(withoutBlocks[0]!)).not.toContain("// Function declaration");
+  expect(stripHeader(withBlocks[0]!)).toContain("// Function declaration");
 });
 
 test("public CLI adds bounded context symbols when requested", async () => {

@@ -10,13 +10,16 @@ import {
   type SymbolLookupMode,
 } from "../lib/ts-symbol-scan";
 
+const rawArgs = normalizeContextArgs(Bun.argv.slice(2));
+
 const { values, positionals } = parseArgs({
-  args: Bun.argv.slice(2),
+  args: rawArgs,
   options: {
     symbol: { type: "string" },
     mode: { type: "string" },
     root: { type: "string" },
-    context: { type: "string" },
+    context: { type: "boolean" },
+    "snippet-context": { type: "string" },
     "context-depth": { type: "string" },
     "with-context-symbols": { type: "boolean" },
     config: { type: "string" },
@@ -50,8 +53,11 @@ async function run(): Promise<void> {
   const mode = resolveMode(normalized, values.mode);
   const format = resolveFormat(values.format, values.json);
   const root = values.root ?? process.cwd();
-  const context = values.context ? Number(values.context) : 0;
+  const context = values["snippet-context"]
+    ? Number(values["snippet-context"])
+    : 0;
   const contextDepth = resolveContextDepth(
+    values.context,
     values["context-depth"],
     values["with-context-symbols"],
   );
@@ -126,30 +132,66 @@ function resolveFormat(
 }
 
 function resolveContextDepth(
+  contextFlag: boolean | undefined,
   value: string | undefined,
   withContextSymbols: boolean | undefined,
 ): ContextDepth {
   if (withContextSymbols) return "structural";
+  if (value === "relationships") return "relationships";
+  if (contextFlag) return "structural";
   if (!value || value === "basic") return "basic";
   if (value === "structural") return "structural";
-  if (value === "relationships") return "relationships";
   throw new CliError(
     "error: --context-depth must be 'basic', 'structural', or 'relationships'",
   );
+}
+
+function normalizeContextArgs(args: string[]): string[] {
+  const normalized: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index]!;
+    const legacyInline = current.match(/^--context=(.+)$/);
+    if (legacyInline) {
+      const value = legacyInline[1];
+      if (isNumericContextValue(value)) {
+        normalized.push(`--snippet-context=${value}`);
+        continue;
+      }
+    }
+
+    if (current === "--context") {
+      const next = args[index + 1];
+      if (next && isNumericContextValue(next)) {
+        normalized.push("--snippet-context", next);
+        index += 1;
+        continue;
+      }
+    }
+
+    normalized.push(current);
+  }
+
+  return normalized;
+}
+
+function isNumericContextValue(value: string): boolean {
+  return /^\d+$/.test(value);
 }
 
 function getHelpText(): string {
   return `ts-symbol
 
 Usage:
-  ts-symbol lookup --symbol <name> --mode <definition|usage> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
-  ts-symbol definition --symbol <name> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
-  ts-symbol usage --symbol <name> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
+  ts-symbol lookup --symbol <name> --mode <definition|usage> --root <path> [--json|--format pretty] [--context] [--snippet-context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
+  ts-symbol definition --symbol <name> --root <path> [--json|--format pretty] [--context] [--snippet-context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
+  ts-symbol usage --symbol <name> --root <path> [--json|--format pretty] [--context] [--snippet-context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
 
 Notes:
   --json is the default output mode.
   --root defaults to the current working directory.
-  --context controls surrounding snippet lines.
+  --context enables structural match metadata.
+  --snippet-context controls surrounding snippet lines.
   --context-depth structural adds usageKind and enclosingSymbol to JSON matches.
   --context-depth relationships adds bounded contextSymbols in addition to structural context.
   --with-context-symbols adds a bounded contextSymbols array and implies structural context.

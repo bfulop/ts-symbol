@@ -188,6 +188,9 @@ test("public CLI pretty output includes structural summaries when context is ena
   expect(stdout).toContain("// usageKind: call");
   expect(stdout).toContain("// enclosingSymbol: result (const) 42-42");
   expect(stdout).toContain(
+    "// ancestorPath: VariableDeclarator:result > CallExpression:getOperatorLabel",
+  );
+  expect(stdout).toContain(
     "// contextSymbols: initializer_target:result, callee:getOperatorLabel, argument:operator",
   );
 });

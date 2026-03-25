@@ -251,6 +251,17 @@ function formatPrettyMatchContext(match: SymbolLookupMatch): string[] {
     );
   }
 
+  if (match.ancestorPath && match.ancestorPath.length > 0) {
+    const summary = match.ancestorPath
+      .map((entry) => {
+        if (entry.callee) return `${entry.kind}:${entry.callee}`;
+        if (entry.name) return `${entry.kind}:${entry.name}`;
+        return entry.kind;
+      })
+      .join(" > ");
+    lines.push(`// ancestorPath: ${summary}`);
+  }
+
   if (match.contextSymbols && match.contextSymbols.length > 0) {
     const summary = match.contextSymbols
       .map((symbol) => `${symbol.role}:${symbol.name}`)

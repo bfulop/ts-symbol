@@ -612,6 +612,53 @@ test("structural context marks PascalCase function declarations as components in
   });
 });
 
+test("structural context identifies class methods as enclosing symbols", async () => {
+  const tmpDir = await mkdtemp(join(tmpdir(), "sg-wrapper-method-context-"));
+  const filePath = join(tmpDir, "MethodContext.ts");
+
+  await writeFile(
+    filePath,
+    [
+      "class LabelsPresenter {",
+      "  renderLabel(operator: string) {",
+      "    return getOperatorLabel(operator);",
+      "  }",
+      "}",
+    ].join("\n"),
+  );
+
+  const usage = await runPublicCli([
+    "usage",
+    "--symbol",
+    "getOperatorLabel",
+    "--root",
+    filePath,
+    "--context-depth",
+    "structural",
+  ]);
+
+  expect(usage.stderr).toBe("");
+  expect(usage.exitCode).toBe(0);
+
+  const payload = JSON.parse(usage.stdout);
+  const methodMatch = payload.matches.find((match: any) =>
+    match.enclosingSymbol?.kind === "method" &&
+    match.enclosingSymbol?.name === "renderLabel" &&
+    match.snippet.includes("return getOperatorLabel(operator);"),
+  );
+
+  expect(methodMatch?.enclosingSymbol).toEqual({
+    name: "renderLabel",
+    kind: "method",
+    startLine: 2,
+    endLine: 4,
+  });
+  expect(methodMatch?.ancestorPath).toEqual([
+    { kind: "MethodDefinition", name: "renderLabel" },
+    { kind: "ReturnStatement", name: "getOperatorLabel" },
+  ]);
+});
+
 test("script entrypoint supports installed-style usage", async () => {
   const { exitCode, stdout, stderr } = await runScriptCli([
     "definition",

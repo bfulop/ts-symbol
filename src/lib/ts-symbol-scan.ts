@@ -912,6 +912,11 @@ function inferDeclarationFromLine(
   endLine: number,
   lines: string[] = [],
 ): EnclosingSymbol | undefined {
+  const method = inferMethodDeclarationFromLine(line, startLine, endLine, lines);
+  if (method) {
+    return method;
+  }
+
   const variable = line.match(
     /^\s*(?:export\s+)?(const|let|var)\s+([A-Za-z_$][\w$]*)\b/,
   );
@@ -978,19 +983,46 @@ function inferDeclarationFromLine(
     };
   }
 
-  const method = line.match(
-    /^\s*(?:public\s+|private\s+|protected\s+|static\s+|readonly\s+|async\s+|get\s+|set\s+)*([A-Za-z_$][\w$]*)\s*\(/,
-  );
-  if (method) {
-    return {
-      name: method[1],
-      kind: "method",
-      startLine,
-      endLine: inferBlockDeclarationEndLine(lines, startLine, endLine),
-    };
+  return undefined;
+}
+
+function inferMethodDeclarationFromLine(
+  line: string,
+  startLine: number,
+  endLine: number,
+  lines: string[],
+): EnclosingSymbol | undefined {
+  const trimmed = line.trim();
+  if (!trimmed.includes("(") || !trimmed.includes("{")) {
+    return undefined;
   }
 
-  return undefined;
+  if (
+    /^(?:if|for|while|switch|catch|return|function|const|let|var|class|interface|type|enum|namespace|import|export)\b/.test(
+      trimmed,
+    )
+  ) {
+    return undefined;
+  }
+
+  const method = trimmed.match(
+    /^(?:public\s+|protected\s+|private\s+|static\s+|readonly\s+|async\s+|override\s+|abstract\s+|declare\s+|get\s+|set\s+)*([A-Za-z_$][\w$]*)\s*(?:<[^>]+>)?\s*\(/,
+  );
+  if (!method) {
+    return undefined;
+  }
+
+  const [, name] = method;
+  if (name === "constructor") {
+    return undefined;
+  }
+
+  return {
+    name,
+    kind: "method",
+    startLine,
+    endLine: inferBlockDeclarationEndLine(lines, startLine, endLine),
+  };
 }
 
 function inferBlockDeclarationEndLine(

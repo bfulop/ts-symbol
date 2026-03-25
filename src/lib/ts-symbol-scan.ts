@@ -826,11 +826,16 @@ function inferDeclarationFromLine(
   );
   if (variable) {
     const [, kind, name] = variable;
+    const declarationEndLine = inferStatementDeclarationEndLine(
+      lines,
+      startLine,
+      endLine,
+    );
     return {
       name,
       kind: inferVariableKind(kind as "const" | "let" | "var", name, line),
       startLine,
-      endLine,
+      endLine: declarationEndLine,
     };
   }
 
@@ -839,37 +844,164 @@ function inferDeclarationFromLine(
   );
   if (fn) {
     const [, name] = fn;
+    const declarationEndLine = inferBlockDeclarationEndLine(
+      lines,
+      startLine,
+      endLine,
+    );
     return {
       name,
       kind: inferFunctionKind(lines, name, startLine),
       startLine,
-      endLine,
+      endLine: declarationEndLine,
     };
   }
 
   const klass = line.match(/^\s*(?:export\s+)?class\s+([A-Za-z_$][\w$]*)\b/);
   if (klass) {
-    return { name: klass[1], kind: "class", startLine, endLine };
+    return {
+      name: klass[1],
+      kind: "class",
+      startLine,
+      endLine: inferBlockDeclarationEndLine(lines, startLine, endLine),
+    };
   }
 
   const iface = line.match(/^\s*(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)\b/);
   if (iface) {
-    return { name: iface[1], kind: "interface", startLine, endLine };
+    return {
+      name: iface[1],
+      kind: "interface",
+      startLine,
+      endLine: inferBlockDeclarationEndLine(lines, startLine, endLine),
+    };
   }
 
   const typeAlias = line.match(/^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\b/);
   if (typeAlias) {
-    return { name: typeAlias[1], kind: "type_alias", startLine, endLine };
+    return {
+      name: typeAlias[1],
+      kind: "type_alias",
+      startLine,
+      endLine: inferStatementDeclarationEndLine(lines, startLine, endLine),
+    };
   }
 
   const method = line.match(
     /^\s*(?:public\s+|private\s+|protected\s+|static\s+|readonly\s+|async\s+|get\s+|set\s+)*([A-Za-z_$][\w$]*)\s*\(/,
   );
   if (method) {
-    return { name: method[1], kind: "method", startLine, endLine };
+    return {
+      name: method[1],
+      kind: "method",
+      startLine,
+      endLine: inferBlockDeclarationEndLine(lines, startLine, endLine),
+    };
   }
 
   return undefined;
+}
+
+function inferBlockDeclarationEndLine(
+  lines: string[],
+  startLine: number,
+  fallbackEndLine: number,
+): number {
+  let depth = 0;
+  let seenOpeningBrace = false;
+  const maxIndex = Math.min(lines.length, startLine + 200);
+  let bodyStartColumn = -1;
+
+  for (let index = startLine - 1; index < maxIndex; index += 1) {
+    const line = sanitizeLineForStructure(lines[index] ?? "");
+    const scanLine =
+      index === startLine - 1
+        ? line.slice(resolveDeclarationBodyStart(line, bodyStartColumn))
+        : line;
+    if (index === startLine - 1) {
+      bodyStartColumn = resolveDeclarationBodyStart(line, bodyStartColumn);
+    }
+
+    for (const char of scanLine) {
+      if (char === "{") {
+        depth += 1;
+        seenOpeningBrace = true;
+      } else if (char === "}" && seenOpeningBrace) {
+        depth = Math.max(0, depth - 1);
+        if (depth === 0) {
+          return index + 1;
+        }
+      }
+    }
+  }
+
+  return Math.max(startLine, fallbackEndLine);
+}
+
+function resolveDeclarationBodyStart(
+  line: string,
+  previousColumn: number,
+): number {
+  if (previousColumn >= 0) return previousColumn;
+
+  const openParenIndex = line.lastIndexOf(")");
+  if (openParenIndex >= 0) {
+    const bodyIndex = line.indexOf("{", openParenIndex);
+    if (bodyIndex >= 0) return bodyIndex;
+  }
+
+  const assignmentIndex = line.indexOf("=>");
+  if (assignmentIndex >= 0) {
+    const bodyIndex = line.indexOf("{", assignmentIndex);
+    if (bodyIndex >= 0) return bodyIndex;
+  }
+
+  const bodyIndex = line.lastIndexOf("{");
+  return bodyIndex >= 0 ? bodyIndex : 0;
+}
+
+function inferStatementDeclarationEndLine(
+  lines: string[],
+  startLine: number,
+  fallbackEndLine: number,
+): number {
+  let parenDepth = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  const maxIndex = Math.min(lines.length, startLine + 200);
+
+  for (let index = startLine - 1; index < maxIndex; index += 1) {
+    const line = sanitizeLineForStructure(lines[index] ?? "");
+    for (const char of line) {
+      if (char === "(") parenDepth += 1;
+      else if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
+      else if (char === "{") braceDepth += 1;
+      else if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
+      else if (char === "[") bracketDepth += 1;
+      else if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+    }
+
+    const trimmed = line.trim();
+    if (
+      trimmed.length > 0 &&
+      parenDepth === 0 &&
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      /[;,]$/.test(trimmed)
+    ) {
+      return index + 1;
+    }
+  }
+
+  return Math.max(startLine, fallbackEndLine);
+}
+
+function sanitizeLineForStructure(line: string): string {
+  return line
+    .replace(/\/\/.*$/, "")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\])*'/g, "''")
+    .replace(/`(?:\\.|[^`\\])*`/g, "``");
 }
 
 function inferVariableKind(

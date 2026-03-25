@@ -228,6 +228,12 @@ test("public CLI adds structural context for usage matches when requested", asyn
   const returnMatch = payload.matches.find((match: any) =>
     match.snippet.includes("return process(MySymbol);"),
   );
+  expect(returnMatch?.enclosingSymbol).toEqual({
+    name: "callWithSymbol",
+    kind: "function",
+    startLine: 111,
+    endLine: 113,
+  });
   expect(returnMatch?.ancestorPath).toEqual([
     { kind: "FunctionDeclaration", name: "callWithSymbol" },
     { kind: "ReturnStatement", name: "MySymbol" },

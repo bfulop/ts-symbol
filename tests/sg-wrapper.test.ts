@@ -234,7 +234,7 @@ test("public CLI adds structural context for usage matches when requested", asyn
   ]);
 });
 
-test("public CLI preserves legacy numeric --context as snippet expansion", async () => {
+test("public CLI expands snippets with --snippet-context", async () => {
   const { stdout: noContext } = await runPublicCli([
     "definition",
     "--symbol",
@@ -243,7 +243,7 @@ test("public CLI preserves legacy numeric --context as snippet expansion", async
     resolve("test-fixtures/definitions.ts"),
     "--format",
     "pretty",
-    "--context",
+    "--snippet-context",
     "0",
   ]);
   const { stdout: withContext } = await runPublicCli([
@@ -254,7 +254,7 @@ test("public CLI preserves legacy numeric --context as snippet expansion", async
     resolve("test-fixtures/definitions.ts"),
     "--format",
     "pretty",
-    "--context",
+    "--snippet-context",
     "1",
   ]);
 

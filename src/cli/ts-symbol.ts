@@ -10,10 +10,8 @@ import {
   type SymbolLookupMode,
 } from "../lib/ts-symbol-scan";
 
-const rawArgs = normalizeContextArgs(Bun.argv.slice(2));
-
 const { values, positionals } = parseArgs({
-  args: rawArgs,
+  args: Bun.argv.slice(2),
   options: {
     symbol: { type: "string" },
     mode: { type: "string" },
@@ -144,39 +142,6 @@ function resolveContextDepth(
   throw new CliError(
     "error: --context-depth must be 'basic', 'structural', or 'relationships'",
   );
-}
-
-function normalizeContextArgs(args: string[]): string[] {
-  const normalized: string[] = [];
-
-  for (let index = 0; index < args.length; index += 1) {
-    const current = args[index]!;
-    const legacyInline = current.match(/^--context=(.+)$/);
-    if (legacyInline) {
-      const value = legacyInline[1];
-      if (isNumericContextValue(value)) {
-        normalized.push(`--snippet-context=${value}`);
-        continue;
-      }
-    }
-
-    if (current === "--context") {
-      const next = args[index + 1];
-      if (next && isNumericContextValue(next)) {
-        normalized.push("--snippet-context", next);
-        index += 1;
-        continue;
-      }
-    }
-
-    normalized.push(current);
-  }
-
-  return normalized;
-}
-
-function isNumericContextValue(value: string): boolean {
-  return /^\d+$/.test(value);
 }
 
 function getHelpText(): string {

@@ -186,6 +186,64 @@ test("public CLI returns zero matches successfully", async () => {
   expect(payload.matches).toEqual([]);
 });
 
+test("public CLI adds structural context for usage matches when requested", async () => {
+  const { exitCode, stdout, stderr } = await runPublicCli([
+    "usage",
+    "--symbol",
+    "MySymbol",
+    "--root",
+    resolve("test-fixtures/usages.ts"),
+    "--context-depth",
+    "structural",
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+
+  const payload = JSON.parse(stdout);
+  const typedMatch = payload.matches.find((match: any) =>
+    match.snippet.includes('typed: MySymbol = value'),
+  );
+  expect(typedMatch?.usageKind).toBe("type_reference");
+  expect(typedMatch?.enclosingSymbol).toEqual({
+    name: "typed",
+    kind: "const",
+    startLine: 43,
+    endLine: 43,
+  });
+
+  const callMatch = payload.matches.find((match: any) =>
+    match.snippet.includes("instance = new MySymbol()"),
+  );
+  expect(callMatch?.usageKind).toBe("call");
+  expect(callMatch?.enclosingSymbol?.name).toBe("instance");
+});
+
+test("public CLI adds structural context for definition matches when requested", async () => {
+  const { exitCode, stdout, stderr } = await runPublicCli([
+    "definition",
+    "--symbol",
+    "MySymbol",
+    "--root",
+    resolve("test-fixtures/definitions.ts"),
+    "--context-depth",
+    "structural",
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+
+  const payload = JSON.parse(stdout);
+  expect(payload.matches).toHaveLength(1);
+  expect(payload.matches[0].usageKind).toBe("definition");
+  expect(payload.matches[0].enclosingSymbol).toEqual({
+    name: "MySymbol",
+    kind: "function",
+    startLine: 2,
+    endLine: 4,
+  });
+});
+
 test("public CLI resolves bundled config outside repo root", async () => {
   const tmpDir = await mkdtemp(join(tmpdir(), "ts-symbol-cwd-"));
   const { exitCode, stdout, stderr } = await runPublicCli(

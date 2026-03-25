@@ -3,6 +3,7 @@
 import { parseArgs } from "node:util";
 import {
   CliError,
+  type ContextDepth,
   formatPrettyResult,
   lookupSymbol,
   type OutputFormat,
@@ -16,6 +17,7 @@ const { values, positionals } = parseArgs({
     mode: { type: "string" },
     root: { type: "string" },
     context: { type: "string" },
+    "context-depth": { type: "string" },
     config: { type: "string" },
     format: { type: "string" },
     json: { type: "boolean" },
@@ -48,6 +50,7 @@ async function run(): Promise<void> {
   const format = resolveFormat(values.format, values.json);
   const root = values.root ?? process.cwd();
   const context = values.context ? Number(values.context) : 0;
+  const contextDepth = resolveContextDepth(values["context-depth"]);
 
   if (Number.isNaN(context) || context < 0) {
     throw new CliError("error: --context must be a non-negative number");
@@ -58,6 +61,7 @@ async function run(): Promise<void> {
     mode,
     root,
     context,
+    contextDepth,
     configPath: values.config,
   });
 
@@ -116,17 +120,25 @@ function resolveFormat(
   throw new CliError("error: --format must be 'json' or 'pretty'");
 }
 
+function resolveContextDepth(value: string | undefined): ContextDepth {
+  if (!value || value === "basic") return "basic";
+  if (value === "structural") return "structural";
+  throw new CliError("error: --context-depth must be 'basic' or 'structural'");
+}
+
 function getHelpText(): string {
   return `ts-symbol
 
 Usage:
-  ts-symbol lookup --symbol <name> --mode <definition|usage> --root <path> [--json|--format pretty] [--context N]
-  ts-symbol definition --symbol <name> --root <path> [--json|--format pretty] [--context N]
-  ts-symbol usage --symbol <name> --root <path> [--json|--format pretty] [--context N]
+  ts-symbol lookup --symbol <name> --mode <definition|usage> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural]
+  ts-symbol definition --symbol <name> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural]
+  ts-symbol usage --symbol <name> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural]
 
 Notes:
   --json is the default output mode.
   --root defaults to the current working directory.
+  --context controls surrounding snippet lines.
+  --context-depth structural adds usageKind and enclosingSymbol to JSON matches.
   --config is available for advanced/custom rule development.
 `;
 }

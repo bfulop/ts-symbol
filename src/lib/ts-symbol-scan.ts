@@ -15,6 +15,7 @@ import { YAML } from "bun";
 
 export type SymbolLookupMode = "definition" | "usage";
 export type OutputFormat = "json" | "pretty";
+export type ContextDepth = "basic" | "structural";
 
 type Config = {
   ruleDirs?: string[];
@@ -46,6 +47,8 @@ export type SymbolLookupMatch = {
   endLine: number;
   ruleId?: string;
   snippet: string;
+  usageKind?: UsageKind;
+  enclosingSymbol?: EnclosingSymbol;
 };
 
 export type SymbolLookupResult = {
@@ -60,7 +63,38 @@ export type LookupOptions = {
   mode: SymbolLookupMode;
   root: string;
   context?: number;
+  contextDepth?: ContextDepth;
   configPath?: string;
+};
+
+export type UsageKind =
+  | "definition"
+  | "call"
+  | "import"
+  | "reexport"
+  | "type_reference"
+  | "value_reference"
+  | "initializer"
+  | "return_value"
+  | "jsx_reference"
+  | "member_reference"
+  | "unknown";
+
+export type EnclosingSymbol = {
+  name: string;
+  kind:
+    | "function"
+    | "method"
+    | "class"
+    | "interface"
+    | "type_alias"
+    | "const"
+    | "let"
+    | "var"
+    | "component"
+    | "unknown";
+  startLine: number;
+  endLine: number;
 };
 
 export class CliError extends Error {
@@ -89,6 +123,7 @@ export async function lookupSymbol(
 
   const root = resolve(options.root);
   const context = Math.max(0, options.context ?? 0);
+  const contextDepth = options.contextDepth ?? "basic";
   const configPath = resolve(options.configPath ?? resolveBundledConfigPath());
   const { config, dir } = await loadConfig(configPath);
   const workDir = await mkdtemp(join(tmpdir(), "ts-symbol-"));
@@ -144,7 +179,13 @@ export async function lookupSymbol(
     }
 
     const displayRoot = await resolveDisplayRoot(root);
-    const matches = await toMatches(parseStream(stdout), context, displayRoot);
+    const matches = await toMatches(
+      parseStream(stdout),
+      context,
+      displayRoot,
+      options.mode,
+      contextDepth,
+    );
 
     return {
       symbol,
@@ -279,6 +320,8 @@ async function toMatches(
   objs: MatchObj[],
   ctx: number,
   displayRoot: string,
+  mode: SymbolLookupMode,
+  contextDepth: ContextDepth,
 ): Promise<SymbolLookupMatch[]> {
   const matches: SymbolLookupMatch[] = [];
   const fileCache = new Map<string, string[]>();
@@ -309,14 +352,26 @@ async function toMatches(
 
     if (!snippet) continue;
 
-    matches.push({
+    const match: SymbolLookupMatch = {
       file: relative(displayRoot, loc.file) || basename(loc.file),
       absoluteFile: loc.file,
       startLine: snippetStart,
       endLine: snippetEnd,
       ruleId: obj.ruleId,
       snippet,
-    });
+    };
+
+    if (contextDepth === "structural") {
+      const structural = buildStructuralContext(obj, lines, mode);
+      if (structural.usageKind) {
+        match.usageKind = structural.usageKind;
+      }
+      if (structural.enclosingSymbol) {
+        match.enclosingSymbol = structural.enclosingSymbol;
+      }
+    }
+
+    matches.push(match);
   }
 
   return matches;
@@ -348,4 +403,203 @@ function normalizeLine(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") return Number(value);
   return 1;
+}
+
+function buildStructuralContext(
+  obj: MatchObj,
+  lines: string[],
+  mode: SymbolLookupMode,
+): {
+  usageKind?: UsageKind;
+  enclosingSymbol?: EnclosingSymbol;
+} {
+  const loc = extractLocation(obj);
+  if (!loc) return {};
+
+  const symbolRef = extractSymbolReference(obj);
+  const startLine = toSourceLineNumber(loc.start.line);
+  const endLine = toSourceLineNumber(loc.end.line);
+  const enclosingSymbol = inferEnclosingSymbol(lines, startLine, endLine);
+
+  if (mode === "definition") {
+    return {
+      usageKind: "definition",
+      enclosingSymbol,
+    };
+  }
+
+  const usageKind = inferUsageKind(lines, symbolRef, startLine, enclosingSymbol);
+  return {
+    usageKind,
+    enclosingSymbol,
+  };
+}
+
+function extractSymbolReference(
+  obj: MatchObj,
+): { line: number; startColumn: number; endColumn: number } | null {
+  const labels = Array.isArray(obj.labels) ? obj.labels : [];
+  const secondary = labels.find((label) => label?.style === "secondary");
+  const start = secondary?.range?.start;
+  const end = secondary?.range?.end;
+  if (start && end) {
+    return {
+      line: toSourceLineNumber(start.line),
+      startColumn: normalizeColumn(start.column),
+      endColumn: normalizeColumn(end.column),
+    };
+  }
+
+  const vars = (obj.metaVariables as any)?.multi?.secondary;
+  const fallback = Array.isArray(vars) ? vars[0] : undefined;
+  if (fallback?.range?.start && fallback?.range?.end) {
+    return {
+      line: toSourceLineNumber(fallback.range.start.line),
+      startColumn: normalizeColumn(fallback.range.start.column),
+      endColumn: normalizeColumn(fallback.range.end.column),
+    };
+  }
+
+  return null;
+}
+
+function inferUsageKind(
+  lines: string[],
+  symbolRef: { line: number; startColumn: number; endColumn: number } | null,
+  matchStartLine: number | undefined,
+  enclosingSymbol: EnclosingSymbol | undefined,
+): UsageKind {
+  const lineNumber = symbolRef?.line ?? normalizeLine(matchStartLine);
+  const line = lines[lineNumber - 1] ?? "";
+  const before = line.slice(0, symbolRef?.startColumn ?? 0);
+  const after = line.slice(symbolRef?.endColumn ?? 0);
+  const trimmedBefore = before.trimEnd();
+  const trimmedAfter = after.trimStart();
+
+  if (/^\s*import\b/.test(line)) return "import";
+  if (/^\s*export\s*{/.test(line)) return "reexport";
+  if (
+    /\bextends\s*$/.test(trimmedBefore) ||
+    /\bimplements\s*$/.test(trimmedBefore) ||
+    /\bas\s*$/.test(trimmedBefore) ||
+    /\bsatisfies\s*$/.test(trimmedBefore) ||
+    /:\s*$/.test(trimmedBefore) ||
+    /<\s*$/.test(trimmedBefore)
+  ) {
+    return "type_reference";
+  }
+  if (/<(?:[A-Z][\w$]*\.)?$/.test(trimmedBefore) || /^(\s|\/|>)/.test(trimmedAfter)) {
+    return "jsx_reference";
+  }
+  if (/[.?]$/.test(trimmedBefore)) return "member_reference";
+  if (trimmedAfter.startsWith("(") || /\bnew\s+$/.test(trimmedBefore)) return "call";
+  if (/\breturn\b/.test(trimmedBefore)) return "return_value";
+  if (
+    enclosingSymbol &&
+    ["const", "let", "var", "component"].includes(enclosingSymbol.kind) &&
+    /=/.test(line)
+  ) {
+    return "initializer";
+  }
+  if (/=/.test(line)) return "initializer";
+  return "value_reference";
+}
+
+function inferEnclosingSymbol(
+  lines: string[],
+  startLine: number | undefined,
+  endLine: number | undefined,
+): EnclosingSymbol | undefined {
+  const firstLine = lines[Math.max(0, normalizeLine(startLine) - 1)] ?? "";
+  const decl = inferDeclarationFromLine(firstLine, normalizeLine(startLine), normalizeLine(endLine));
+  if (decl) return decl;
+
+  const lineNumber = normalizeLine(startLine);
+  for (let index = lineNumber - 1; index >= Math.max(0, lineNumber - 25); index -= 1) {
+    const candidate = inferDeclarationFromLine(lines[index] ?? "", index + 1, index + 1);
+    if (candidate) return candidate;
+  }
+
+  return undefined;
+}
+
+function inferDeclarationFromLine(
+  line: string,
+  startLine: number,
+  endLine: number,
+): EnclosingSymbol | undefined {
+  const variable = line.match(
+    /^\s*(?:export\s+)?(const|let|var)\s+([A-Za-z_$][\w$]*)\b/,
+  );
+  if (variable) {
+    const [, kind, name] = variable;
+    return {
+      name,
+      kind: inferVariableKind(kind as "const" | "let" | "var", name, line),
+      startLine,
+      endLine,
+    };
+  }
+
+  const fn = line.match(
+    /^\s*(?:export\s+default\s+|export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\b/,
+  );
+  if (fn) {
+    const [, name] = fn;
+    return {
+      name,
+      kind: "function",
+      startLine,
+      endLine,
+    };
+  }
+
+  const klass = line.match(/^\s*(?:export\s+)?class\s+([A-Za-z_$][\w$]*)\b/);
+  if (klass) {
+    return { name: klass[1], kind: "class", startLine, endLine };
+  }
+
+  const iface = line.match(/^\s*(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)\b/);
+  if (iface) {
+    return { name: iface[1], kind: "interface", startLine, endLine };
+  }
+
+  const typeAlias = line.match(/^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\b/);
+  if (typeAlias) {
+    return { name: typeAlias[1], kind: "type_alias", startLine, endLine };
+  }
+
+  const method = line.match(
+    /^\s*(?:public\s+|private\s+|protected\s+|static\s+|readonly\s+|async\s+|get\s+|set\s+)*([A-Za-z_$][\w$]*)\s*\(/,
+  );
+  if (method) {
+    return { name: method[1], kind: "method", startLine, endLine };
+  }
+
+  return undefined;
+}
+
+function inferVariableKind(
+  keyword: "const" | "let" | "var",
+  name: string,
+  line: string,
+): EnclosingSymbol["kind"] {
+  if (keyword === "const" && isComponentName(name) && (line.includes("=>") || line.includes("<"))) {
+    return "component";
+  }
+  return keyword;
+}
+
+function isComponentName(name: string): boolean {
+  return /^[A-Z]/.test(name);
+}
+
+function normalizeColumn(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") return Number(value);
+  return 0;
+}
+
+function toSourceLineNumber(value: unknown): number {
+  return normalizeLine(value) + 1;
 }

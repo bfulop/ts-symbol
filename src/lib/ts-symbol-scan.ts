@@ -838,17 +838,44 @@ function inferUsageKind(
     return "jsx_reference";
   }
   if (/[.?]$/.test(trimmedBefore)) return "member_reference";
-  if (trimmedAfter.startsWith("(") || /\bnew\s+$/.test(trimmedBefore)) return "call";
   if (/\breturn\b/.test(trimmedBefore)) return "return_value";
-  if (
-    enclosingSymbol &&
-    ["const", "let", "var", "component"].includes(enclosingSymbol.kind) &&
-    /=/.test(line)
-  ) {
+  if (isInitializerWrappedReference(trimmedBefore, enclosingSymbol)) {
     return "initializer";
   }
+  if (trimmedAfter.startsWith("(") || /\bnew\s+$/.test(trimmedBefore)) return "call";
   if (/=/.test(line)) return "initializer";
   return "value_reference";
+}
+
+function isInitializerWrappedReference(
+  trimmedBefore: string,
+  enclosingSymbol: EnclosingSymbol | undefined,
+): boolean {
+  if (
+    !enclosingSymbol ||
+    !["const", "let", "var", "component"].includes(enclosingSymbol.kind)
+  ) {
+    return false;
+  }
+
+  const lastEquals = trimmedBefore.lastIndexOf("=");
+  if (lastEquals < 0) return false;
+
+  const beforeEquals = trimmedBefore[lastEquals - 1] ?? "";
+  const afterEquals = trimmedBefore[lastEquals + 1] ?? "";
+  if (
+    beforeEquals === "=" ||
+    beforeEquals === "!" ||
+    beforeEquals === "<" ||
+    beforeEquals === ">" ||
+    beforeEquals === ":" ||
+    afterEquals === "=" ||
+    afterEquals === ">"
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function inferEnclosingSymbol(

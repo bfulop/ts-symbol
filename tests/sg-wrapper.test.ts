@@ -185,10 +185,10 @@ test("public CLI pretty output includes structural summaries when context is ena
 
   expect(stderr).toBe("");
   expect(exitCode).toBe(0);
-  expect(stdout).toContain("// usageKind: call");
+  expect(stdout).toContain("// usageKind: initializer");
   expect(stdout).toContain("// enclosingSymbol: result (const) 42-42");
   expect(stdout).toContain(
-    "// ancestorPath: VariableDeclarator:result > CallExpression:getOperatorLabel",
+    "// ancestorPath: VariableDeclarator:result > VariableDeclarator:result",
   );
   expect(stdout).toContain(
     "// contextSymbols: initializer_target:result, callee:getOperatorLabel, argument:operator",
@@ -244,7 +244,7 @@ test("public CLI pretty output highlights import-only and exported initializer m
 
   expect(initializerResult.stderr).toBe("");
   expect(initializerResult.exitCode).toBe(0);
-  expect(initializerResult.stdout).toContain("// usageKind: call");
+  expect(initializerResult.stdout).toContain("// usageKind: initializer");
   expect(initializerResult.stdout).toContain("// note: exported initializer");
   expect(initializerResult.stdout).toContain("// enclosingSymbol: buildValue (const) 6-6");
 });
@@ -294,15 +294,26 @@ test("public CLI adds structural context for usage matches when requested", asyn
     { kind: "TSTypeReference", name: "MySymbol" },
   ]);
 
-  const callMatch = payload.matches.find((match: any) =>
+  const wrappedNewMatch = payload.matches.find((match: any) =>
     match.snippet.includes("instance = new MySymbol()"),
   );
-  expect(callMatch?.usageKind).toBe("call");
-  expect(callMatch?.enclosingSymbol?.name).toBe("instance");
-  expect(callMatch?.ancestorPath).toEqual([
+  expect(wrappedNewMatch?.usageKind).toBe("initializer");
+  expect(wrappedNewMatch?.enclosingSymbol?.name).toBe("instance");
+  expect(wrappedNewMatch?.ancestorPath).toEqual([
     { kind: "VariableDeclarator", name: "instance" },
-    { kind: "CallExpression", callee: "MySymbol" },
+    { kind: "VariableDeclarator", name: "instance" },
   ]);
+
+  const initializerMatch = payload.matches.find((match: any) =>
+    match.snippet.includes("result = MySymbol + 5"),
+  );
+  expect(initializerMatch?.usageKind).toBe("initializer");
+  expect(initializerMatch?.enclosingSymbol).toEqual({
+    name: "result",
+    kind: "const",
+    startLine: 14,
+    endLine: 14,
+  });
 
   const returnMatch = payload.matches.find((match: any) =>
     match.snippet.includes("return process(MySymbol);"),

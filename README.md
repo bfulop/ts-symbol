@@ -55,6 +55,12 @@ bun run ts-symbol usage --symbol UserService --root /path/to/repo --format prett
   returns fenced code blocks with `// path: ...` headers for humans.
 - `--context <N>`
   expands each snippet by `N` lines of context on both sides.
+- `--context-depth structural`
+  adds `usageKind`, `enclosingSymbol`, and `ancestorPath` to JSON matches.
+- `--context-depth relationships`
+  adds the structural fields plus bounded `contextSymbols` for adjacent identifiers.
+- `--with-context-symbols`
+  enables bounded `contextSymbols` and currently implies structural context.
 - `--config <path>`
   advanced override for rule development; normal usage should rely on the bundled rules.
 

@@ -15,7 +15,7 @@ import { YAML } from "bun";
 
 export type SymbolLookupMode = "definition" | "usage";
 export type OutputFormat = "json" | "pretty";
-export type ContextDepth = "basic" | "structural";
+export type ContextDepth = "basic" | "structural" | "relationships";
 
 type Config = {
   ruleDirs?: string[];
@@ -146,7 +146,8 @@ export async function lookupSymbol(
   const root = resolve(options.root);
   const context = Math.max(0, options.context ?? 0);
   const contextDepth = options.contextDepth ?? "basic";
-  const withContextSymbols = options.withContextSymbols ?? false;
+  const withContextSymbols =
+    (options.withContextSymbols ?? false) || contextDepth === "relationships";
   const configPath = resolve(options.configPath ?? resolveBundledConfigPath());
   const { config, dir } = await loadConfig(configPath);
   const workDir = await mkdtemp(join(tmpdir(), "ts-symbol-"));

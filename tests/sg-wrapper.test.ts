@@ -273,6 +273,47 @@ test("public CLI adds bounded context symbols when requested", async () => {
   expect(assignmentMatch?.ancestorPath).toBeDefined();
 });
 
+test("public CLI supports relationship depth as an alias for structural context plus context symbols", async () => {
+  const { exitCode, stdout, stderr } = await runPublicCli([
+    "usage",
+    "--symbol",
+    "getOperatorLabel",
+    "--root",
+    resolve("test-fixtures/usages-expanded-context.ts"),
+    "--context-depth",
+    "relationships",
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+
+  const payload = JSON.parse(stdout);
+  const assignmentMatch = payload.matches.find((match: any) =>
+    match.snippet.includes("result = getOperatorLabel(operator)"),
+  );
+
+  expect(assignmentMatch?.usageKind).toBeDefined();
+  expect(assignmentMatch?.enclosingSymbol).toBeDefined();
+  expect(assignmentMatch?.ancestorPath).toBeDefined();
+  expect(assignmentMatch?.contextSymbols).toEqual([
+    {
+      name: "result",
+      kind: "value_reference",
+      role: "initializer_target",
+    },
+    {
+      name: "getOperatorLabel",
+      kind: "call_target",
+      role: "callee",
+    },
+    {
+      name: "operator",
+      kind: "value_reference",
+      role: "argument",
+    },
+  ]);
+});
+
 test("public CLI adds structural context for definition matches when requested", async () => {
   const { exitCode, stdout, stderr } = await runPublicCli([
     "definition",

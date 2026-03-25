@@ -132,22 +132,26 @@ function resolveContextDepth(
   if (withContextSymbols) return "structural";
   if (!value || value === "basic") return "basic";
   if (value === "structural") return "structural";
-  throw new CliError("error: --context-depth must be 'basic' or 'structural'");
+  if (value === "relationships") return "relationships";
+  throw new CliError(
+    "error: --context-depth must be 'basic', 'structural', or 'relationships'",
+  );
 }
 
 function getHelpText(): string {
   return `ts-symbol
 
 Usage:
-  ts-symbol lookup --symbol <name> --mode <definition|usage> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural] [--with-context-symbols]
-  ts-symbol definition --symbol <name> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural] [--with-context-symbols]
-  ts-symbol usage --symbol <name> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural] [--with-context-symbols]
+  ts-symbol lookup --symbol <name> --mode <definition|usage> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
+  ts-symbol definition --symbol <name> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
+  ts-symbol usage --symbol <name> --root <path> [--json|--format pretty] [--context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
 
 Notes:
   --json is the default output mode.
   --root defaults to the current working directory.
   --context controls surrounding snippet lines.
   --context-depth structural adds usageKind and enclosingSymbol to JSON matches.
+  --context-depth relationships adds bounded contextSymbols in addition to structural context.
   --with-context-symbols adds a bounded contextSymbols array and implies structural context.
   --config is available for advanced/custom rule development.
 `;

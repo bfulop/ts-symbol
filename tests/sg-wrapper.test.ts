@@ -211,12 +211,28 @@ test("public CLI adds structural context for usage matches when requested", asyn
     startLine: 43,
     endLine: 43,
   });
+  expect(typedMatch?.ancestorPath).toEqual([
+    { kind: "VariableDeclarator", name: "typed" },
+    { kind: "TSTypeReference", name: "MySymbol" },
+  ]);
 
   const callMatch = payload.matches.find((match: any) =>
     match.snippet.includes("instance = new MySymbol()"),
   );
   expect(callMatch?.usageKind).toBe("call");
   expect(callMatch?.enclosingSymbol?.name).toBe("instance");
+  expect(callMatch?.ancestorPath).toEqual([
+    { kind: "VariableDeclarator", name: "instance" },
+    { kind: "CallExpression", callee: "MySymbol" },
+  ]);
+
+  const returnMatch = payload.matches.find((match: any) =>
+    match.snippet.includes("return process(MySymbol);"),
+  );
+  expect(returnMatch?.ancestorPath).toEqual([
+    { kind: "FunctionDeclaration", name: "callWithSymbol" },
+    { kind: "ReturnStatement", name: "MySymbol" },
+  ]);
 });
 
 test("public CLI adds structural context for definition matches when requested", async () => {
@@ -242,6 +258,10 @@ test("public CLI adds structural context for definition matches when requested",
     startLine: 2,
     endLine: 4,
   });
+  expect(payload.matches[0].ancestorPath).toEqual([
+    { kind: "FunctionDeclaration", name: "MySymbol" },
+    { kind: "Identifier", name: "MySymbol" },
+  ]);
 });
 
 test("public CLI resolves bundled config outside repo root", async () => {

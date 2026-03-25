@@ -49,6 +49,7 @@ export type SymbolLookupMatch = {
   snippet: string;
   usageKind?: UsageKind;
   enclosingSymbol?: EnclosingSymbol;
+  ancestorPath?: AncestorPathEntry[];
 };
 
 export type SymbolLookupResult = {
@@ -95,6 +96,12 @@ export type EnclosingSymbol = {
     | "unknown";
   startLine: number;
   endLine: number;
+};
+
+export type AncestorPathEntry = {
+  kind: string;
+  name?: string;
+  callee?: string;
 };
 
 export class CliError extends Error {
@@ -369,6 +376,9 @@ async function toMatches(
       if (structural.enclosingSymbol) {
         match.enclosingSymbol = structural.enclosingSymbol;
       }
+      if (structural.ancestorPath && structural.ancestorPath.length > 0) {
+        match.ancestorPath = structural.ancestorPath;
+      }
     }
 
     matches.push(match);
@@ -412,6 +422,7 @@ function buildStructuralContext(
 ): {
   usageKind?: UsageKind;
   enclosingSymbol?: EnclosingSymbol;
+  ancestorPath?: AncestorPathEntry[];
 } {
   const loc = extractLocation(obj);
   if (!loc) return {};
@@ -420,19 +431,156 @@ function buildStructuralContext(
   const startLine = toSourceLineNumber(loc.start.line);
   const endLine = toSourceLineNumber(loc.end.line);
   const enclosingSymbol = inferEnclosingSymbol(lines, startLine, endLine);
+  const usageKind =
+    mode === "definition"
+      ? "definition"
+      : inferUsageKind(lines, symbolRef, startLine, enclosingSymbol);
+  const ancestorPath = inferAncestorPath(
+    lines,
+    symbolRef,
+    startLine,
+    mode,
+    usageKind,
+    enclosingSymbol,
+  );
 
   if (mode === "definition") {
     return {
-      usageKind: "definition",
+      usageKind,
       enclosingSymbol,
+      ancestorPath,
     };
   }
 
-  const usageKind = inferUsageKind(lines, symbolRef, startLine, enclosingSymbol);
   return {
     usageKind,
     enclosingSymbol,
+    ancestorPath,
   };
+}
+
+function inferAncestorPath(
+  lines: string[],
+  symbolRef: { line: number; startColumn: number; endColumn: number } | null,
+  matchStartLine: number | undefined,
+  mode: SymbolLookupMode,
+  usageKind: UsageKind,
+  enclosingSymbol: EnclosingSymbol | undefined,
+): AncestorPathEntry[] | undefined {
+  const lineNumber = symbolRef?.line ?? normalizeLine(matchStartLine);
+  const line = lines[lineNumber - 1] ?? "";
+  const path: AncestorPathEntry[] = [];
+
+  if (/^\s*import\b/.test(line)) {
+    path.push({ kind: "ImportDeclaration" });
+  } else if (/^\s*export\s*{/.test(line)) {
+    path.push({ kind: "ExportNamedDeclaration" });
+  } else if (/^\s*export\b/.test(line)) {
+    path.push({ kind: "ExportNamedDeclaration" });
+  }
+
+  if (enclosingSymbol) {
+    path.push(toDeclarationPathEntry(enclosingSymbol));
+  }
+
+  const leaf = inferUsagePathLeaf(
+    line,
+    symbolRef,
+    usageKind,
+    mode,
+    enclosingSymbol,
+  );
+  if (leaf) {
+    path.push(leaf);
+  }
+
+  return path.length > 0 ? path : undefined;
+}
+
+function toDeclarationPathEntry(
+  enclosingSymbol: EnclosingSymbol,
+): AncestorPathEntry {
+  switch (enclosingSymbol.kind) {
+    case "function":
+      return { kind: "FunctionDeclaration", name: enclosingSymbol.name };
+    case "method":
+      return { kind: "MethodDefinition", name: enclosingSymbol.name };
+    case "class":
+      return { kind: "ClassDeclaration", name: enclosingSymbol.name };
+    case "interface":
+      return { kind: "InterfaceDeclaration", name: enclosingSymbol.name };
+    case "type_alias":
+      return { kind: "TypeAliasDeclaration", name: enclosingSymbol.name };
+    case "const":
+    case "let":
+    case "var":
+    case "component":
+      return { kind: "VariableDeclarator", name: enclosingSymbol.name };
+    default:
+      return { kind: "UnknownDeclaration", name: enclosingSymbol.name };
+  }
+}
+
+function inferUsagePathLeaf(
+  line: string,
+  symbolRef: { line: number; startColumn: number; endColumn: number } | null,
+  usageKind: UsageKind,
+  mode: SymbolLookupMode,
+  enclosingSymbol: EnclosingSymbol | undefined,
+): AncestorPathEntry | undefined {
+  const symbolName = extractSymbolNameFromLine(line, symbolRef);
+  if (mode === "definition") {
+    return symbolName
+      ? { kind: "Identifier", name: symbolName }
+      : { kind: "Identifier" };
+  }
+
+  switch (usageKind) {
+    case "import":
+      return symbolName
+        ? { kind: "ImportSpecifier", name: symbolName }
+        : { kind: "ImportSpecifier" };
+    case "reexport":
+      return symbolName
+        ? { kind: "ExportSpecifier", name: symbolName }
+        : { kind: "ExportSpecifier" };
+    case "call":
+      return symbolName
+        ? { kind: "CallExpression", callee: symbolName }
+        : { kind: "CallExpression" };
+    case "jsx_reference":
+      return symbolName
+        ? { kind: "JSXOpeningElement", name: symbolName }
+        : { kind: "JSXOpeningElement" };
+    case "type_reference":
+      return { kind: "TSTypeReference", name: symbolName };
+    case "member_reference":
+      return symbolName
+        ? { kind: "MemberExpression", name: symbolName }
+        : { kind: "MemberExpression" };
+    case "initializer":
+      if (enclosingSymbol) {
+        return { kind: "VariableDeclarator", name: enclosingSymbol.name };
+      }
+      return { kind: "AssignmentExpression" };
+    case "return_value":
+      return { kind: "ReturnStatement", name: symbolName };
+    case "value_reference":
+      return symbolName
+        ? { kind: "Identifier", name: symbolName }
+        : { kind: "Identifier" };
+    default:
+      return { kind: "Identifier", name: symbolName };
+  }
+}
+
+function extractSymbolNameFromLine(
+  line: string,
+  symbolRef: { startColumn: number; endColumn: number } | null,
+): string | undefined {
+  if (!symbolRef) return undefined;
+  const value = line.slice(symbolRef.startColumn, symbolRef.endColumn).trim();
+  return value.length > 0 ? value : undefined;
 }
 
 function extractSymbolReference(

@@ -13,16 +13,16 @@ Use `ts-symbol` before broad text search when you need TypeScript declarations o
 
 ```bash
 # Find declarations
-bun run ts-symbol definition --symbol UserService --root /path/to/repo
+ts-symbol definition --symbol UserService --root /path/to/repo
 
 # Find usages
-bun run ts-symbol usage --symbol UserService --root /path/to/repo
+ts-symbol usage --symbol UserService --root /path/to/repo
 
 # Explicit lookup mode
-bun run ts-symbol lookup --symbol UserService --mode usage --root /path/to/repo --json
+ts-symbol lookup --symbol UserService --mode usage --root /path/to/repo --json
 
 # Process with jq
-bun run ts-symbol lookup --symbol UserService --mode usage --root /path/to/repo --json | jq '.matches[].file'
+ts-symbol lookup --symbol UserService --mode usage --root /path/to/repo --json | jq '.matches[].file'
 ```
 
 ## Output contract

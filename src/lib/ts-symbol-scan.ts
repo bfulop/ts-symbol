@@ -50,6 +50,7 @@ export type SymbolLookupMatch = {
   usageKind?: UsageKind;
   enclosingSymbol?: EnclosingSymbol;
   ancestorPath?: AncestorPathEntry[];
+  contextSymbols?: ContextSymbol[];
 };
 
 export type SymbolLookupResult = {
@@ -65,6 +66,7 @@ export type LookupOptions = {
   root: string;
   context?: number;
   contextDepth?: ContextDepth;
+  withContextSymbols?: boolean;
   configPath?: string;
 };
 
@@ -104,6 +106,19 @@ export type AncestorPathEntry = {
   callee?: string;
 };
 
+export type ContextSymbol = {
+  name: string;
+  kind: "call_target" | "value_reference" | "type_reference";
+  role:
+    | "callee"
+    | "argument"
+    | "initializer_target"
+    | "assigned_value"
+    | "returned_symbol"
+    | "type_argument"
+    | "jsx_tag";
+};
+
 export class CliError extends Error {
   constructor(
     message: string,
@@ -131,6 +146,7 @@ export async function lookupSymbol(
   const root = resolve(options.root);
   const context = Math.max(0, options.context ?? 0);
   const contextDepth = options.contextDepth ?? "basic";
+  const withContextSymbols = options.withContextSymbols ?? false;
   const configPath = resolve(options.configPath ?? resolveBundledConfigPath());
   const { config, dir } = await loadConfig(configPath);
   const workDir = await mkdtemp(join(tmpdir(), "ts-symbol-"));
@@ -192,6 +208,7 @@ export async function lookupSymbol(
       displayRoot,
       options.mode,
       contextDepth,
+      withContextSymbols,
     );
 
     return {
@@ -329,6 +346,7 @@ async function toMatches(
   displayRoot: string,
   mode: SymbolLookupMode,
   contextDepth: ContextDepth,
+  withContextSymbols: boolean,
 ): Promise<SymbolLookupMatch[]> {
   const matches: SymbolLookupMatch[] = [];
   const fileCache = new Map<string, string[]>();
@@ -368,8 +386,13 @@ async function toMatches(
       snippet,
     };
 
-    if (contextDepth === "structural") {
-      const structural = buildStructuralContext(obj, lines, mode);
+    if (contextDepth === "structural" || withContextSymbols) {
+      const structural = buildStructuralContext(
+        obj,
+        lines,
+        mode,
+        withContextSymbols,
+      );
       if (structural.usageKind) {
         match.usageKind = structural.usageKind;
       }
@@ -378,6 +401,9 @@ async function toMatches(
       }
       if (structural.ancestorPath && structural.ancestorPath.length > 0) {
         match.ancestorPath = structural.ancestorPath;
+      }
+      if (structural.contextSymbols && structural.contextSymbols.length > 0) {
+        match.contextSymbols = structural.contextSymbols;
       }
     }
 
@@ -419,10 +445,12 @@ function buildStructuralContext(
   obj: MatchObj,
   lines: string[],
   mode: SymbolLookupMode,
+  withContextSymbols: boolean,
 ): {
   usageKind?: UsageKind;
   enclosingSymbol?: EnclosingSymbol;
   ancestorPath?: AncestorPathEntry[];
+  contextSymbols?: ContextSymbol[];
 } {
   const loc = extractLocation(obj);
   if (!loc) return {};
@@ -443,20 +471,125 @@ function buildStructuralContext(
     usageKind,
     enclosingSymbol,
   );
-
-  if (mode === "definition") {
-    return {
-      usageKind,
-      enclosingSymbol,
-      ancestorPath,
-    };
-  }
+  const contextSymbols = withContextSymbols
+    ? inferContextSymbols(
+        lines,
+        symbolRef,
+        startLine,
+        usageKind,
+        enclosingSymbol,
+      )
+    : undefined;
 
   return {
     usageKind,
     enclosingSymbol,
     ancestorPath,
+    contextSymbols,
   };
+}
+
+function inferContextSymbols(
+  lines: string[],
+  symbolRef: { line: number; startColumn: number; endColumn: number } | null,
+  matchStartLine: number | undefined,
+  usageKind: UsageKind,
+  enclosingSymbol: EnclosingSymbol | undefined,
+): ContextSymbol[] | undefined {
+  const lineNumber = symbolRef?.line ?? normalizeLine(matchStartLine);
+  const line = lines[lineNumber - 1] ?? "";
+  const symbolName = extractSymbolNameFromLine(line, symbolRef);
+  const symbols: ContextSymbol[] = [];
+
+  const push = (entry: ContextSymbol | undefined) => {
+    if (!entry) return;
+    if (
+      symbols.some(
+        (candidate) =>
+          candidate.name === entry.name &&
+          candidate.kind === entry.kind &&
+          candidate.role === entry.role,
+      )
+    ) {
+      return;
+    }
+    symbols.push(entry);
+  };
+
+  if (
+    enclosingSymbol &&
+    ["const", "let", "var", "component"].includes(enclosingSymbol.kind)
+  ) {
+    const declarationLine = lines[Math.max(0, enclosingSymbol.startLine - 1)] ?? "";
+    if (usageKind === "initializer" || declarationLine.includes("=")) {
+      push({
+        name: enclosingSymbol.name,
+        kind: "value_reference",
+        role: "initializer_target",
+      });
+    }
+  }
+
+  if (usageKind === "return_value" && symbolName) {
+    push({
+      name: symbolName,
+      kind: "value_reference",
+      role: "returned_symbol",
+    });
+  }
+
+  if (usageKind === "jsx_reference" && symbolName) {
+    push({
+      name: symbolName,
+      kind: "value_reference",
+      role: "jsx_tag",
+    });
+  }
+
+  if (usageKind === "type_reference" && symbolName && line.includes(`<${symbolName}`)) {
+    push({
+      name: symbolName,
+      kind: "type_reference",
+      role: "type_argument",
+    });
+  }
+
+  const callMatch = line.match(/([A-Za-z_$][\w$.]*)\s*\(([^()]*)\)/);
+  if (callMatch) {
+    const [, rawCallee, rawArgs] = callMatch;
+    const calleeName = rawCallee.split(".").pop();
+    if (calleeName) {
+      push({
+        name: calleeName,
+        kind: "call_target",
+        role: "callee",
+      });
+    }
+
+    for (const arg of extractDirectIdentifierArguments(rawArgs)) {
+      push({
+        name: arg,
+        kind: "value_reference",
+        role: "argument",
+      });
+    }
+  }
+
+  return symbols.length > 0 ? symbols.slice(0, 4) : undefined;
+}
+
+function extractDirectIdentifierArguments(rawArgs: string): string[] {
+  if (!rawArgs.trim()) return [];
+
+  const values: string[] = [];
+  for (const arg of rawArgs.split(",")) {
+    const normalized = arg.trim();
+    if (/^[A-Za-z_$][\w$]*$/.test(normalized)) {
+      values.push(normalized);
+    }
+  }
+
+  return values;
 }
 
 function inferAncestorPath(

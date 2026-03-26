@@ -116,7 +116,9 @@ export type ContextSymbol = {
     | "assigned_value"
     | "returned_symbol"
     | "type_argument"
-    | "jsx_tag";
+    | "jsx_tag"
+    | "annotated_symbol"
+    | "type_owner";
 };
 
 export class CliError extends Error {
@@ -620,15 +622,15 @@ function inferContextSymbols(
     });
   }
 
-  if (usageKind === "type_reference" && symbolName && line.includes(`<${symbolName}`)) {
-    push({
-      name: symbolName,
-      kind: "type_reference",
-      role: "type_argument",
-    });
+  if (usageKind === "type_reference" && symbolName) {
+    for (const entry of inferTypeReferenceContextSymbols(line, symbolName)) {
+      push(entry);
+    }
   }
 
-  const callMatch = line.match(/([A-Za-z_$][\w$.]*)\s*\(([^()]*)\)/);
+  const callMatch = shouldInferCallContext(line)
+    ? line.match(/([A-Za-z_$][\w$.]*)\s*\(([^()]*)\)/)
+    : null;
   if (callMatch) {
     const [, rawCallee, rawArgs] = callMatch;
     const calleeName = rawCallee.split(".").pop();
@@ -650,6 +652,102 @@ function inferContextSymbols(
   }
 
   return symbols.length > 0 ? symbols.slice(0, 4) : undefined;
+}
+
+function inferTypeReferenceContextSymbols(
+  line: string,
+  symbolName: string,
+): ContextSymbol[] {
+  const symbols: ContextSymbol[] = [
+    {
+      name: symbolName,
+      kind: "type_reference",
+      role: "type_argument",
+    },
+  ];
+  const escapedSymbolName = escapeRegExp(symbolName);
+
+  const variableAnnotation = line.match(
+    new RegExp(
+      String.raw`(?:^|\b)(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*:\s*[^=;]*\b${escapedSymbolName}\b`,
+    ),
+  );
+  if (variableAnnotation) {
+    symbols.push({
+      name: variableAnnotation[1],
+      kind: "value_reference",
+      role: "annotated_symbol",
+    });
+  }
+
+  const parameterAnnotation = line.match(
+    new RegExp(
+      String.raw`\(\s*([A-Za-z_$][\w$]*)\s*:\s*[^)]*\b${escapedSymbolName}\b`,
+    ),
+  );
+  if (parameterAnnotation) {
+    symbols.push({
+      name: parameterAnnotation[1],
+      kind: "value_reference",
+      role: "annotated_symbol",
+    });
+  }
+
+  const assertionOwner = line.match(
+    new RegExp(
+      String.raw`(?:^|\b)(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=.*\b(?:as|satisfies)\s+${escapedSymbolName}\b`,
+    ),
+  );
+  if (assertionOwner) {
+    symbols.push({
+      name: assertionOwner[1],
+      kind: "value_reference",
+      role: "annotated_symbol",
+    });
+  }
+
+  const typeOwner = line.match(
+    new RegExp(
+      String.raw`(?:^|\b)(?:class|interface)\s+([A-Za-z_$][\w$]*)\s+(?:extends|implements)\s+${escapedSymbolName}\b`,
+    ),
+  );
+  if (typeOwner) {
+    symbols.push({
+      name: typeOwner[1],
+      kind: "value_reference",
+      role: "type_owner",
+    });
+  }
+
+  const functionReturnOwner = line.match(
+    new RegExp(
+      String.raw`(?:^|\b)(?:export\s+default\s+|export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\b[^{}]*:\s*[^({;=]*\b${escapedSymbolName}\b`,
+    ),
+  );
+  if (functionReturnOwner) {
+    symbols.push({
+      name: functionReturnOwner[1],
+      kind: "value_reference",
+      role: "type_owner",
+    });
+  }
+
+  return symbols;
+}
+
+function shouldInferCallContext(line: string): boolean {
+  const trimmed = line.trim();
+  if (
+    /^(?:export\s+default\s+|export\s+)?(?:async\s+)?function\b/.test(trimmed)
+  ) {
+    return false;
+  }
+
+  if (/^(?:class|interface|type|enum|namespace)\b/.test(trimmed)) {
+    return false;
+  }
+
+  return true;
 }
 
 function extractDirectIdentifierArguments(rawArgs: string): string[] {
@@ -931,6 +1029,10 @@ function extractAssignmentTarget(line: string): string | undefined {
     /^\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\[[^\]]+\])?)\s*=(?!=|>)/,
   );
   return match?.[1];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function inferEnclosingSymbol(

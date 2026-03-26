@@ -398,6 +398,77 @@ test("public CLI adds bounded context symbols when requested", async () => {
   expect(assignmentMatch?.ancestorPath).toBeDefined();
 });
 
+test("relationship mode adds adjacent owners for common type references", async () => {
+  const { exitCode, stdout, stderr } = await runPublicCli([
+    "usage",
+    "--symbol",
+    "MySymbol",
+    "--root",
+    resolve("test-fixtures/usages.ts"),
+    "--context-depth",
+    "relationships",
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+
+  const payload = JSON.parse(stdout);
+
+  const typedMatch = payload.matches.find((match: any) =>
+    match.snippet.includes("typed: MySymbol = value"),
+  );
+  expect(typedMatch?.contextSymbols).toEqual(
+    expect.arrayContaining([
+      {
+        name: "MySymbol",
+        kind: "type_reference",
+        role: "type_argument",
+      },
+      {
+        name: "typed",
+        kind: "value_reference",
+        role: "annotated_symbol",
+      },
+    ]),
+  );
+
+  const extendsMatch = payload.matches.find((match: any) =>
+    match.snippet.includes("class ExtendedClass extends MySymbol"),
+  );
+  expect(extendsMatch?.contextSymbols).toEqual(
+    expect.arrayContaining([
+      {
+        name: "MySymbol",
+        kind: "type_reference",
+        role: "type_argument",
+      },
+      {
+        name: "ExtendedClass",
+        kind: "value_reference",
+        role: "type_owner",
+      },
+    ]),
+  );
+
+  const assertedMatch = payload.matches.find((match: any) =>
+    match.snippet.includes("someValue as MySymbol"),
+  );
+  expect(assertedMatch?.contextSymbols).toEqual(
+    expect.arrayContaining([
+      {
+        name: "MySymbol",
+        kind: "type_reference",
+        role: "type_argument",
+      },
+      {
+        name: "asserted",
+        kind: "value_reference",
+        role: "annotated_symbol",
+      },
+    ]),
+  );
+});
+
 test("public CLI supports relationship depth as an alias for structural context plus context symbols", async () => {
   const { exitCode, stdout, stderr } = await runPublicCli([
     "usage",

@@ -1,13 +1,18 @@
+---
+name: ts-symbol
+description: Use the ts-symbol CLI to locate TypeScript or TSX symbol definitions and usages with AST-aware matching. Trigger this skill when Codex needs to answer questions like where a symbol is declared, where it is used, what depends on it, or which files reference a TypeScript identifier, and prefer it before broad text search in TypeScript codebases.
+---
+
 # ts-symbol
 
-Use `ts-symbol` before broad text search when you need TypeScript declarations or usages.
+Use `ts-symbol` before `rg` or generic grep when the task is specifically about a TypeScript symbol declaration or reference.
 
-## Guidance
+## Quick Start
 
-- Use `definition` to answer “where is this declared?”
-- Use `usage` to answer “what depends on this?”
-- Prefer `--json` for machine handling and follow-up filtering
-- Fall back to plain text search when the symbol is ambiguous or you expect syntax the rules do not cover
+- Run `ts-symbol definition` for questions like "where is this declared?"
+- Run `ts-symbol usage` for questions like "where is this used?" or "what depends on this?"
+- Pass `--root` explicitly when searching outside the current working directory
+- Prefer JSON output for follow-up filtering; `--json` is already the default
 
 ## Commands
 
@@ -19,20 +24,28 @@ ts-symbol definition --symbol UserService --root /path/to/repo
 ts-symbol usage --symbol UserService --root /path/to/repo
 
 # Explicit lookup mode
-ts-symbol lookup --symbol UserService --mode usage --root /path/to/repo --json
+ts-symbol lookup --symbol UserService --mode usage --root /path/to/repo
 
-# Process with jq
-ts-symbol lookup --symbol UserService --mode usage --root /path/to/repo --json | jq '.matches[].file'
+# Narrow follow-up processing with jq
+ts-symbol usage --symbol UserService --root /path/to/repo | jq -r '.matches[].absoluteFile'
 ```
 
-## Output contract
+## Working Rules
 
-`--json` returns:
+- Use `definition` first when the user asks about a symbol's source declaration
+- Use `usage` first when the user asks about dependents, references, or impact
+- Use `lookup` only when the mode must be supplied dynamically
+- Treat zero matches as a valid result, not an error
+- Fall back to `rg` or broader search when the symbol name is ambiguous, when you need fuzzy discovery rather than exact identifier lookup, or when the syntax is likely outside the tool's rule coverage
+
+## Output Contract
+
+`ts-symbol` returns JSON shaped like:
 
 - `symbol`
 - `mode`
 - `root`
 - `matches[]`
-- each match contains `file`, `absoluteFile`, `startLine`, `endLine`, `ruleId`, and `snippet`
+- Each match includes `file`, `absoluteFile`, `startLine`, `endLine`, `ruleId`, and `snippet`
 
-Zero matches is a successful response with `matches: []`.
+Use `matches: []` to represent a successful search with no results.

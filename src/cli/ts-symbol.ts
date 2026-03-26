@@ -41,12 +41,12 @@ void run().catch((error) => {
 });
 
 async function run(): Promise<void> {
-  if (values.help) {
+  const command = positionals[0] ?? "lookup";
+  if (values.help || command === "help") {
     process.stdout.write(getHelpText());
     return;
   }
 
-  const command = positionals[0] ?? "lookup";
   const normalized = normalizeCommand(command);
   const mode = resolveMode(normalized, values.mode);
   const format = resolveFormat(values.format, values.json);
@@ -89,7 +89,7 @@ function normalizeCommand(value: string): "lookup" | SymbolLookupMode {
   }
 
   throw new CliError(
-    `error: unknown command '${value}'. Use lookup, definition, or usage.`,
+    `error: unknown command '${value}'. Use help, lookup, definition, or usage.`,
   );
 }
 
@@ -148,11 +148,13 @@ function getHelpText(): string {
   return `ts-symbol
 
 Usage:
+  ts-symbol help
   ts-symbol lookup --symbol <name> --mode <definition|usage> --root <path> [--json|--format pretty] [--context] [--snippet-context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
   ts-symbol definition --symbol <name> --root <path> [--json|--format pretty] [--context] [--snippet-context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
   ts-symbol usage --symbol <name> --root <path> [--json|--format pretty] [--context] [--snippet-context N] [--context-depth basic|structural|relationships] [--with-context-symbols]
 
 Notes:
+  Use 'ts-symbol help' or '--help' to show this message.
   --json is the default output mode.
   --root defaults to the current working directory.
   --context enables structural match metadata.

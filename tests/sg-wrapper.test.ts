@@ -153,6 +153,25 @@ test("public CLI lookup command requires mode", async () => {
   expect(stderr).toContain("--mode is required");
 });
 
+test("public CLI prints help for the help command", async () => {
+  const { exitCode, stdout, stderr } = await runPublicCli(["help"]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain("ts-symbol help");
+  expect(stdout).toContain("ts-symbol lookup");
+  expect(stdout).toContain("Use 'ts-symbol help' or '--help' to show this message.");
+});
+
+test("public CLI prints help for --help", async () => {
+  const { exitCode, stdout, stderr } = await runPublicCli(["--help"]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain("ts-symbol help");
+  expect(stdout).toContain("ts-symbol usage");
+});
+
 test("public CLI returns pretty output when requested", async () => {
   const { exitCode, stdout, stderr } = await runPublicCli([
     "usage",

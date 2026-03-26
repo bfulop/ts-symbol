@@ -71,7 +71,9 @@ function createLookupTool(mode: SymbolLookupMode, description: string) {
       root: toolFactory.schema
         .string()
         .optional()
-        .describe("Repository root (defaults to ~/Work/pulsar)"),
+        .describe(
+          "Absolute filesystem path to a project directory or a single .ts/.tsx file (defaults to ~/Work/pulsar)",
+        ),
     },
     async execute(args: LookupArgs) {
       return runScan(mode, args.symbol, args.root);
@@ -81,10 +83,10 @@ function createLookupTool(mode: SymbolLookupMode, description: string) {
 
 export const findDefinition = createLookupTool(
   "definition",
-  "Find TypeScript symbol definitions in the repository",
+  "Find TypeScript symbol definitions at the given filesystem path",
 );
 
 export const findUsage = createLookupTool(
   "usage",
-  "Find TypeScript symbol usages in the repository. Each block starts with: <path>:<startLine>-<endLine>",
+  "Find TypeScript symbol usages at the given filesystem path. Each block starts with: <path>:<startLine>-<endLine>",
 );

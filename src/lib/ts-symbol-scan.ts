@@ -565,6 +565,7 @@ function inferContextSymbols(
   const line = lines[lineNumber - 1] ?? "";
   const symbolName = extractSymbolNameFromLine(line, symbolRef);
   const symbols: ContextSymbol[] = [];
+  const assignmentTarget = extractAssignmentTarget(line);
 
   const push = (entry: ContextSymbol | undefined) => {
     if (!entry) return;
@@ -593,6 +594,14 @@ function inferContextSymbols(
         role: "initializer_target",
       });
     }
+  }
+
+  if (assignmentTarget && !isVariableDeclarationLine(line)) {
+    push({
+      name: assignmentTarget,
+      kind: "value_reference",
+      role: "assigned_value",
+    });
   }
 
   if (usageKind === "return_value" && symbolName) {
@@ -757,10 +766,12 @@ function inferUsagePathLeaf(
         ? { kind: "MemberExpression", name: symbolName }
         : { kind: "MemberExpression" };
     case "initializer":
-      if (enclosingSymbol) {
+      if (enclosingSymbol && isVariableDeclarationLine(line)) {
         return { kind: "VariableDeclarator", name: enclosingSymbol.name };
       }
-      return { kind: "AssignmentExpression" };
+      return extractAssignmentTarget(line)
+        ? { kind: "AssignmentExpression", name: extractAssignmentTarget(line) }
+        : { kind: "AssignmentExpression" };
     case "return_value":
       return { kind: "ReturnStatement", name: symbolName };
     case "value_reference":
@@ -842,6 +853,9 @@ function inferUsageKind(
   if (isInitializerWrappedReference(trimmedBefore, enclosingSymbol)) {
     return "initializer";
   }
+  if (isAssignmentWrappedReference(line, symbolRef)) {
+    return "initializer";
+  }
   if (trimmedAfter.startsWith("(") || /\bnew\s+$/.test(trimmedBefore)) return "call";
   if (/=/.test(line)) return "initializer";
   return "value_reference";
@@ -876,6 +890,47 @@ function isInitializerWrappedReference(
   }
 
   return true;
+}
+
+function isAssignmentWrappedReference(
+  line: string,
+  symbolRef: { startColumn: number; endColumn: number } | null,
+): boolean {
+  if (!symbolRef || isVariableDeclarationLine(line)) {
+    return false;
+  }
+
+  const equalsIndex = line.indexOf("=");
+  if (equalsIndex < 0 || symbolRef.startColumn <= equalsIndex) {
+    return false;
+  }
+
+  const beforeEquals = line[equalsIndex - 1] ?? "";
+  const afterEquals = line[equalsIndex + 1] ?? "";
+  if (
+    beforeEquals === "=" ||
+    beforeEquals === "!" ||
+    beforeEquals === "<" ||
+    beforeEquals === ">" ||
+    beforeEquals === ":" ||
+    afterEquals === "=" ||
+    afterEquals === ">"
+  ) {
+    return false;
+  }
+
+  return Boolean(extractAssignmentTarget(line));
+}
+
+function isVariableDeclarationLine(line: string): boolean {
+  return /^\s*(?:export\s+)?(?:const|let|var)\b/.test(line);
+}
+
+function extractAssignmentTarget(line: string): string | undefined {
+  const match = line.match(
+    /^\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\[[^\]]+\])?)\s*=(?!=|>)/,
+  );
+  return match?.[1];
 }
 
 function inferEnclosingSymbol(

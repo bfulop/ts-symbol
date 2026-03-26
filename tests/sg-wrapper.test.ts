@@ -439,6 +439,64 @@ test("public CLI supports relationship depth as an alias for structural context 
   ]);
 });
 
+test("relationship mode reports assignment targets for non-declaration assignments", async () => {
+  const tmpDir = await mkdtemp(join(tmpdir(), "sg-wrapper-assignment-context-"));
+  const filePath = join(tmpDir, "AssignmentContext.ts");
+
+  await writeFile(
+    filePath,
+    [
+      "function updateLabel(operator: string) {",
+      "  currentLabel = getOperatorLabel(operator);",
+      "}",
+    ].join("\n"),
+  );
+
+  const { exitCode, stdout, stderr } = await runPublicCli([
+    "usage",
+    "--symbol",
+    "getOperatorLabel",
+    "--root",
+    filePath,
+    "--context-depth",
+    "relationships",
+  ]);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+
+  const payload = JSON.parse(stdout);
+  expect(payload.matches).toHaveLength(1);
+  expect(payload.matches[0].usageKind).toBe("initializer");
+  expect(payload.matches[0].enclosingSymbol).toEqual({
+    name: "updateLabel",
+    kind: "function",
+    startLine: 1,
+    endLine: 3,
+  });
+  expect(payload.matches[0].ancestorPath).toEqual([
+    { kind: "FunctionDeclaration", name: "updateLabel" },
+    { kind: "AssignmentExpression", name: "currentLabel" },
+  ]);
+  expect(payload.matches[0].contextSymbols).toEqual([
+    {
+      name: "currentLabel",
+      kind: "value_reference",
+      role: "assigned_value",
+    },
+    {
+      name: "getOperatorLabel",
+      kind: "call_target",
+      role: "callee",
+    },
+    {
+      name: "operator",
+      kind: "value_reference",
+      role: "argument",
+    },
+  ]);
+});
+
 test("public CLI adds structural context for definition matches when requested", async () => {
   const { exitCode, stdout, stderr } = await runPublicCli([
     "definition",
